@@ -15,6 +15,10 @@
  */
 package edu.berkeley.cs.amplab.adam.cli
 
+import edu.berkeley.cs.amplab.adam.util._
+import net.sf.samtools.{CigarOperator, TextCigarCodec}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext
 import org.apache.hadoop.mapreduce.Job
 import edu.berkeley.cs.amplab.adam.predicates.LocusPredicate
 import org.kohsuke.args4j.{Option => option, Argument}

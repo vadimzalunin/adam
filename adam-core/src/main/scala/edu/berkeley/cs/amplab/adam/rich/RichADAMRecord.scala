@@ -17,7 +17,8 @@ package edu.berkeley.cs.amplab.adam.rich
 
 import edu.berkeley.cs.amplab.adam.avro.ADAMRecord
 import net.sf.samtools.{CigarElement, CigarOperator, Cigar, TextCigarCodec}
-import scala.collection.JavaConversions._
+import edu.berkeley.cs.amplab.adam.util.MdTag
+import edu.berkeley.cs.amplab.adam.util.ImplicitJavaConversions._
 import edu.berkeley.cs.amplab.adam.util.MdTag
 
 object RichADAMRecord {
@@ -49,9 +50,11 @@ class RichADAMRecord(val record: ADAMRecord) {
     }
   }
 
-  lazy val samtoolsCigar: Cigar = {
-    RichADAMRecord.CIGAR_CODEC.decode(record.getCigar.toString)
+  var samtoolsCigar: Cigar = {
+    RichADAMRecord.CIGAR_CODEC.decode(record.getCigar)
   }
+
+  lazy val mdTag: MdTag = MdTag(record.getMismatchingPositions)
 
   private def isClipped(el: CigarElement) = {
     el.getOperator == CigarOperator.SOFT_CLIP ||
