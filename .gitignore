@@ -5,7 +5,8 @@ adam*.jar
 build
 *~
 #*
-*.bam*
 *.adam*
 *.vcf*
 *.log
+*.bam*
+

@@ -23,59 +23,39 @@ import org.apache.spark.SparkContext
 import org.apache.hadoop.mapreduce.Job
 import edu.berkeley.cs.amplab.adam.predicates.LocusPredicate
 import org.kohsuke.args4j.{Option => option, Argument}
+import scala.collection.immutable.StringOps
 import edu.berkeley.cs.amplab.adam.rdd.AdamContext._
-import edu.berkeley.cs.amplab.adam.avro.{ADAMPileup, ADAMRecord}
-import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
+import edu.berkeley.cs.amplab.adam.avro.{Base, ADAMPileup, ADAMRecord}
+import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord
+import edu.berkeley.cs.amplab.adam.util.ImplicitJavaConversions._
 
-object Reads2Ref extends AdamCommandCompanion {
-  val commandName: String = "reads2ref"
+object LocallyRealign extends AdamCommandCompanion {
+  val commandName: String = "locallyRealign"
   val commandDescription: String = "Convert an ADAM read-oriented file to an ADAM reference-oriented file"
+  val CIGAR_CODEC: TextCigarCodec = TextCigarCodec.getSingleton
 
   def apply(cmdLine: Array[String]) = {
-    new Reads2Ref(Args4j[Reads2RefArgs](cmdLine))
+    new LocallyRealign(Args4j[LocallyRealignArgs](cmdLine))
   }
 }
 
-object Reads2RefArgs {
-  val MIN_MAPQ_DEFAULT: Long = 30L
-}
-
-class Reads2RefArgs extends Args4jBase with ParquetArgs with SparkArgs {
+class LocallyRealignArgs extends Args4jBase with ParquetArgs with SparkArgs {
   @Argument(metaVar = "ADAMREADS", required = true, usage = "ADAM read-oriented data", index = 0)
   var readInput: String = _
 
   @Argument(metaVar = "DIR", required = true, usage = "Location to create reference-oriented ADAM data", index = 1)
-  var pileupOutput: String = _
-
-  @option(name = "-mapq", usage = "Minimal mapq value allowed for a read (default = 30)")
-  var minMapq: Long = Reads2RefArgs.MIN_MAPQ_DEFAULT
-
-  @option(name = "-aggregate", usage = "Aggregates data at each pileup position, to reduce storage cost.")
-  var aggregate: Boolean = false
+  var output: String = _
 }
 
-class Reads2Ref(protected val args: Reads2RefArgs) extends AdamSparkCommand[Reads2RefArgs] {
-  val companion = Reads2Ref
+class LocallyRealign(protected val args: LocallyRealignArgs) extends AdamSparkCommand[LocallyRealignArgs] {
+  val companion = LocallyRealign
 
   def run(sc: SparkContext, job: Job) {
     val reads: RDD[ADAMRecord] = sc.adamLoad(args.readInput, Some(classOf[LocusPredicate]))
 
-    val readCount = reads.count()
-
-    val pileups: RDD[ADAMPileup] = reads.adamRecords2Pileup()
-
-    val pileupCount = pileups.count()
-
-    val coverage = pileupCount / readCount
-
-    if (args.aggregate) {
-      pileups.adamAggregatePileups(coverage.toInt).adamSave(args.pileupOutput,
-        blockSize = args.blockSize, pageSize = args.pageSize, compressCodec = args.compressionCodec,
-        disableDictionaryEncoding = args.disableDictionary)
-    } else {
-      pileups.adamSave(args.pileupOutput, blockSize = args.blockSize, pageSize = args.pageSize,
-        compressCodec = args.compressionCodec, disableDictionaryEncoding = args.disableDictionary)
-    }
+    val realignedReads = reads.adamRealignIndels ()
+    
+    realignedReads.adamSave(args.output)
   }
+
 }
