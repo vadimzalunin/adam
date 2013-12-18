@@ -49,15 +49,21 @@ class RealignmentTargetFinder extends Serializable with Logging {
    * @return A merged set of targets.
    */
   @tailrec protected final def joinTargets (
-    first: TreeSet[IndelRealignmentTarget], 
+    first: TreeSet[IndelRealignmentTarget],
     second: TreeSet[IndelRealignmentTarget]): TreeSet[IndelRealignmentTarget] = {
-    
-    // if the two sets overlap, we must merge their head and tail elements, else we can just blindly append
-    if (!TargetOrdering.overlap(first.last, second.head)) {
-      first.union(second)
-    } else {
-      // merge the tail of the first set and the head of the second set and retry the merge
-      joinTargets (first - first.last + first.last.merge(second.head), second - second.head)
+
+    if(!first.isEmpty && second.isEmpty)
+      first
+    else if(first.isEmpty && !second.isEmpty)
+      second
+    else {
+      // if the two sets overlap, we must merge their head and tail elements, else we can just blindly append
+      if (!TargetOrdering.overlap(first.last, second.head)) {
+        first.union(second)
+      } else {
+        // merge the tail of the first set and the head of the second set and retry the merge
+        joinTargets (first - first.last + first.last.merge(second.head), second - second.head)
+      }
     }
   }
 
@@ -73,17 +79,21 @@ class RealignmentTargetFinder extends Serializable with Logging {
     val rods: RDD[Seq[ADAMPileup]] = reads.adamRecords2Pileup()
       .groupBy(_.getPosition).map(_._2)
 
+    def createTreeSet(target : IndelRealignmentTarget) : TreeSet[IndelRealignmentTarget] = {
+      val tmp = new TreeSet()(TargetOrdering)
+      tmp + target
+    }
+
     /* for each rod, generate an indel realignment target. we then filter out all "empty" targets: these
      * are targets which do not show snp/indel evidence. we order these targets by reference position, and
      * merge targets who have overlapping positions
      */
     val targetSet = rods.map(IndelRealignmentTarget(_))
       .filter(!_.isEmpty)
-      .keyBy(_.getReadRange.start)
+      .keyBy(_.getSortKey())
       .sortByKey()
-      .map(new TreeSet()(TargetOrdering) + _._2)
+      .map(x => createTreeSet(x._2)).collect()
       .fold(new TreeSet()(TargetOrdering))(joinTargets)
-
     targetSet
   }
 

@@ -17,12 +17,12 @@
 package edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget
 
 import edu.berkeley.cs.amplab.adam.avro.{ADAMPileup, ADAMRecord}
-import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord
 import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord._
-import scala.collection.immutable.{HashSet, NumericRange}
+import scala.collection.immutable.{TreeSet, HashSet, NumericRange}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import org.apache.spark.Logging
+
 
 object TargetOrdering extends Ordering[IndelRealignmentTarget] {
 
@@ -68,7 +68,7 @@ object TargetOrdering extends Ordering[IndelRealignmentTarget] {
   }
 }
 
-class IndelRange (indelRange: NumericRange.Inclusive[Long], readRange: NumericRange.Inclusive[Long]) {
+class IndelRange (indelRange: NumericRange[Long], readRange: NumericRange[Long]) {
 
   /**
    * Merge two identical indel ranges.
@@ -85,9 +85,9 @@ class IndelRange (indelRange: NumericRange.Inclusive[Long], readRange: NumericRa
       (readRange.start min ir.getReadRange.start) to (readRange.end max ir.getReadRange.end))
   }
 
-  def getIndelRange (): NumericRange.Inclusive[Long] = indelRange
+  def getIndelRange (): NumericRange[Long] = indelRange
 
-  def getReadRange (): NumericRange.Inclusive[Long] = readRange
+  def getReadRange (): NumericRange[Long] = readRange
 
 }
 
@@ -111,7 +111,7 @@ class IndelRangeSerializer extends Serializer[IndelRange] {
   }
 }
 
-class SNPRange (snpSite: Long, readRange: NumericRange.Inclusive[Long]) {
+class SNPRange (snpSite: Long, readRange: NumericRange[Long]) {
 
   /**
    * Merge two identical SNP sites.
@@ -130,7 +130,7 @@ class SNPRange (snpSite: Long, readRange: NumericRange.Inclusive[Long]) {
 
   def getSNPSite(): Long = snpSite
 
-  def getReadRange(): NumericRange.Inclusive[Long] = readRange
+  def getReadRange(): NumericRange[Long] = readRange
 
 }
 
@@ -175,7 +175,7 @@ object IndelRealignmentTarget {
       Option(pileup.getReadBase) match {
         case None => {
           // deletion
-          new IndelRange((pileup.getPosition.toLong - pileup.getRangeOffset.toLong) to (pileup.getPosition.toLong + pileup.getRangeLength.toLong - pileup.getRangeOffset.toLong),
+          new IndelRange((pileup.getPosition.toLong - pileup.getRangeOffset.toLong) to (pileup.getPosition.toLong + pileup.getRangeLength.toLong - pileup.getRangeOffset.toLong - 1),
             pileup.getReadStart.toLong to pileup.getReadEnd.toLong)
         }
         case Some(o) => {
@@ -193,7 +193,7 @@ object IndelRealignmentTarget {
      * @return SNP range.
      */
     def mapPoint(pileup: ADAMPileup): SNPRange = {
-      val range : NumericRange.Inclusive[Long] = pileup.getReadStart.toLong to pileup.getReadEnd.toLong
+      val range : NumericRange[Long] = pileup.getReadStart.toLong to pileup.getReadEnd.toLong
       new SNPRange(pileup.getPosition, range)
     }
 
@@ -216,9 +216,14 @@ object IndelRealignmentTarget {
 
     // check our mismatch ratio - if we have a sufficiently high ratio of mismatch quality, generate a snp event, else just generate indel events
     if (matchQuality == 0 || mismatchQuality.toDouble / matchQuality.toDouble >= mismatchThreshold) {
-      new IndelRealignmentTarget(indels.map(mapEvent).toSet, mismatches.map(mapPoint).toSet)
+      new IndelRealignmentTarget(
+        new HashSet[IndelRange]().union(indels.map(mapEvent).toSet),
+        new HashSet[SNPRange]().union(mismatches.map(mapPoint).toSet)
+      )
     } else {
-      new IndelRealignmentTarget(indels.map(mapEvent).toSet, HashSet[SNPRange]())
+      new IndelRealignmentTarget(
+        new HashSet[IndelRange]().union(indels.map(mapEvent).toSet), HashSet[SNPRange]()
+      )
     }
   }
 
@@ -249,8 +254,8 @@ class IndelRealignmentTarget(indelSet: Set[IndelRange], snpSet: Set[SNPRange]) e
   // the maximum range covered by either snps or indels
   // TODO (for Frank): think about what happens when either SNP or Indel range is empty, which
   // leads to readRange being null
-  lazy val readRange = (indelSet.toList.map(_.getReadRange) ++ snpSet.toList.map(_.getReadRange))
-    .reduce((a: NumericRange.Inclusive[Long], b: NumericRange.Inclusive[Long]) => (a.start min b.start) to (a.end max b.end))
+  def readRange = (indelSet.toList.map(_.getReadRange) ++ snpSet.toList.map(_.getReadRange))
+    .reduce((a: NumericRange[Long], b: NumericRange[Long]) => (a.start min b.start) to (a.end max b.end))
 
   /**
    * Merges two indel realignment targets.
@@ -266,15 +271,40 @@ class IndelRealignmentTarget(indelSet: Set[IndelRange], snpSet: Set[SNPRange]) e
     indelSet.isEmpty && snpSet.isEmpty
   }
 
-  def getReadRange(): NumericRange.Inclusive[Long] = {
+  def getReadRange(): NumericRange[Long] = {
     if (   (snpSet != null || indelSet != null)
         && (readRange == null))
       log.warn("snpSet or indelSet non-empty but readRange empty!")
     readRange
   }
 
+  def getSortKey(): Long = {
+    if (readRange != null)
+      readRange.start
+    else if( ! getIndelSet().isEmpty && getSNPSet().isEmpty)
+      getIndelSet().head.getReadRange().start
+    else if(getIndelSet().isEmpty && ! getSNPSet().isEmpty)
+      getSNPSet().head.getReadRange().start
+    else {
+      log.error("unknown sort key for IndelRealignmentTarget")
+      -1.toLong
+    }
+
+  }
+
   protected[realignmenttarget] def getSNPSet(): Set[SNPRange] = snpSet
 
   protected[realignmenttarget] def getIndelSet(): Set[IndelRange] = indelSet
 
+}
+
+class TreeSetSerializer extends Serializer[TreeSet[IndelRealignmentTarget]] {
+
+  def write (kryo: Kryo, output: Output, obj: TreeSet[IndelRealignmentTarget]) = {
+    kryo.writeClassAndObject(output, obj.toList)
+  }
+
+  def read (kryo: Kryo, input: Input, klazz: Class[TreeSet[IndelRealignmentTarget]]) : TreeSet[IndelRealignmentTarget] = {
+    new TreeSet()(TargetOrdering).union(kryo.readClassAndObject(input).asInstanceOf[List[IndelRealignmentTarget]].toSet)
+  }
 }
