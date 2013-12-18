@@ -64,8 +64,8 @@ class AdamContextSuite extends SparkFunSuite {
     // 702258 (start position of second read) has a SNP (reference: G, read: C)
     val second_index = first_index + 100
     assert(pileup_collected(second_index).getPosition === 702258 - 1)
-    assert(pileup_collected(second_index).getReadBase === Base.G)
-    assert(pileup_collected(second_index).getReferenceBase === Base.C)
+    assert(pileup_collected(second_index).getReadBase === Base.C)
+    assert(pileup_collected(second_index).getReferenceBase === Base.G)
 
     // second read has CIGAR 32M1D33M1I34M, so a deletion that is eventually followed
     // by an insertion; MD: 0G24A6^T67

@@ -23,7 +23,8 @@ import edu.berkeley.cs.amplab.adam.avro.{ADAMGenotype, ADAMPileup, ADAMRecord}
 import edu.berkeley.cs.amplab.adam.models._
 import it.unimi.dsi.fastutil.io.{FastByteArrayInputStream, FastByteArrayOutputStream}
 import org.apache.spark.serializer.KryoRegistrator
-import edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget.{SNPRangeSerializer, SNPRange, IndelRangeSerializer, IndelRange}
+import edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget._
+import scala.collection.immutable.{TreeSet, NumericRange}
 
 case class InputStreamWithDecoder(size: Int) {
   val buffer = new Array[Byte](size)
@@ -72,5 +73,7 @@ class AdamKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[SingleReadBucket], new SingleReadBucketSerializer)
     kryo.register(classOf[IndelRange], new IndelRangeSerializer())
     kryo.register(classOf[SNPRange], new SNPRangeSerializer)
+    kryo.register(classOf[IndelRealignmentTarget])
+    kryo.register(classOf[TreeSet[IndelRealignmentTarget]], new TreeSetSerializer)
   }
 }
