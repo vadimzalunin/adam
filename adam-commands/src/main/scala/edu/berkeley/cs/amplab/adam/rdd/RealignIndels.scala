@@ -101,7 +101,7 @@ private[rdd] class RealignIndels extends Serializable with Logging {
    * consensus, or not realigned if there is not a sufficiently good consensus.
    */
   def realignTargetGroup (targetGroup: (IndelRealignmentTarget, Seq[ADAMRecord])): Seq[ADAMRecord] = {
-    val (target, reads): (IndelRealignmentTarget, Seq[ADAMRecord]) = targetGroup
+    val (target, reads)= targetGroup
     
     if (target.isEmpty) {
       // if the indel realignment target is empty, do not realign
