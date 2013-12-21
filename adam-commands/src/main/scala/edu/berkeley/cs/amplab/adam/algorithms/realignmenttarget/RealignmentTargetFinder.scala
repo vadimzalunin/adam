@@ -48,6 +48,9 @@ class RealignmentTargetFinder extends Serializable with Logging {
    * @param second A sorted set of realignment targets.
    * @return A merged set of targets.
    */
+  // TODO: it seems that the old way of merging allows for duplicate targets (say two copies of the same indel
+  // that have been generated from two different reads that therefore have different read ranges)
+  // That should be fixed now, see the change in merging.
   @tailrec protected final def joinTargets (
     first: TreeSet[IndelRealignmentTarget],
     second: TreeSet[IndelRealignmentTarget]): TreeSet[IndelRealignmentTarget] = {
