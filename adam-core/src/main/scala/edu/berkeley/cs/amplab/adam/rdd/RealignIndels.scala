@@ -47,7 +47,42 @@ private[rdd] object RealignIndels {
   def apply(rdd: RDD[ADAMRecord]): RDD[ADAMRecord] = {
     new RealignIndels().realignIndels(rdd)
   }
+
+  /**
+   * Method to map a record to an indel realignment target. Returns the target to align to if the read has a
+   * target and should be realigned, else returns the "empty" target.
+   *
+   * @param read Read to check.
+   * @param targets Sorted set of realignment targets.
+   * @return If overlapping target is found, returns that target. Else, returns the "empty" target.
+   */
+  @tailrec final def mapToTarget (read: ADAMRecord,
+                                  targets: TreeSet[IndelRealignmentTarget]): IndelRealignmentTarget = {
+    // Perform tail call recursive binary search
+    if (targets.size == 1) {
+      // TODO (Frank): Andre change this from equals to contains; please verify
+      // if (TargetOrdering.equals (targets.head, read)) {
+      if (TargetOrdering.contains (targets.head, read)) {
+        // if there is overlap, return the overlapping target
+        targets.head
+      } else {
+        // else, return the empty target
+        IndelRealignmentTarget.emptyTarget
+      }
+    } else {
+      // split the set and recurse
+      val (head, tail) = targets.splitAt(targets.size / 2)
+      val reducedSet = if (TargetOrdering.lt(tail.head, read)) {
+        head
+      } else {
+        tail
+      }
+      mapToTarget (read, reducedSet)
+    }
+  }
 }
+
+import RealignIndels._
 
 private[rdd] class RealignIndels extends Serializable with Logging {
   initLogging()
@@ -62,37 +97,6 @@ private[rdd] class RealignIndels extends Serializable with Logging {
   val lodThreshold = 5.0
 
   /**
-   * Method to map a record to an indel realignment target. Returns the target to align to if the read has a
-   * target and should be realigned, else returns the "empty" target.
-   *
-   * @param read Read to check.
-   * @param targets Sorted set of realignment targets.
-   * @return If overlapping target is found, returns that target. Else, returns the "empty" target.
-   */
-  @tailrec final def mapToTarget (read: ADAMRecord,
-			          targets: TreeSet[IndelRealignmentTarget]): IndelRealignmentTarget = {
-    // Perform tail call recursive binary search
-    if (targets.size == 1) {
-      if (TargetOrdering.equals (targets.head, read)) {
-        // if there is overlap, return the overlapping target
-	targets.head
-      } else {
-        // else, return the empty target
-	IndelRealignmentTarget.emptyTarget
-      }
-    } else {
-      // split the set and recurse
-      val (head, tail) = targets.splitAt(targets.size / 2) 
-      val reducedSet = if (TargetOrdering.lt(tail.head, read)) {
-	head
-      } else {
-	tail
-      }
-      mapToTarget (read, reducedSet)
-    }
-  }
-
-  /**
    * Given a target group with an indel realignment target and a group of reads to realign, this method
    * generates read consensuses and realigns reads if a consensus leads to a sufficient improvement.
    *
@@ -102,7 +106,6 @@ private[rdd] class RealignIndels extends Serializable with Logging {
    */
   def realignTargetGroup (targetGroup: (IndelRealignmentTarget, Seq[ADAMRecord])): Seq[ADAMRecord] = {
     val (target, reads) = targetGroup
-    
     if (target.isEmpty) {
       // if the indel realignment target is empty, do not realign
       reads
@@ -113,29 +116,29 @@ private[rdd] class RealignIndels extends Serializable with Logging {
       var realignedReads = List[ADAMRecord]()
       var readsToClean = List[ADAMRecord]()
       var consensus = List[Consensus]()
-      
+
       // loop across reads and triage/generate consensus sequences
       reads.foreach(r => {
-	
-        // if there are two alignment blocks (sequence matches) then there is a single indel in the read
-	if (r.samtoolsCigar.numAlignmentBlocks == 2) {
-          // left align this indel and update the mdtag
-	  r.samtoolsCigar = leftAlignIndel(r.samtoolsCigar)
-	  r.mdTag.moveAlignment(r, r.samtoolsCigar)
-	}
 
-	if (r.mdTag.hasMismatches) {
+        // if there are two alignment blocks (sequence matches) then there is a single indel in the read
+        if (r.samtoolsCigar.numAlignmentBlocks == 2) {
+          // left align this indel and update the mdtag
+          r.samtoolsCigar = leftAlignIndel(r.samtoolsCigar)
+          r.mdTag.moveAlignment(r, r.samtoolsCigar)
+        }
+
+        if (r.mdTag.hasMismatches) {
           // we clean all reads that have mismatches
-	  readsToClean = r :: readsToClean
-	  
+          readsToClean = r :: readsToClean
+
           // try to generate a consensus alignment - if a consensus exists, add it to our list of consensuses to test
-	  consensus = Consensus.generateAlternateConsensus(r.getSequence, r.getStart, r.samtoolsCigar) match {
+          consensus = Consensus.generateAlternateConsensus(r.getSequence, r.getStart, r.samtoolsCigar) match {
             case Some(o) => o :: consensus
             case None => consensus
           }
-	} else {
+        } else {
           // if the read does not have mismatches, then we needn't process it further
-	  realignedReads = r :: realignedReads
+          realignedReads = r :: realignedReads
         }
       })
 
@@ -163,7 +166,7 @@ private[rdd] class RealignIndels extends Serializable with Logging {
           val sweptValues = readsToClean.map(r => {
             val (qual, pos) = sweepReadOverReferenceForQuality(r.getSequence, reference, r.qualityScores.map(_.toInt))
             val originalQual = sumMismatchQuality(r)
-            
+
             // if the read's mismatch quality improves over the original alignment, save 
             // its alignment in the consensus sequence, else store -1 
             if (qual < originalQual) {
@@ -172,7 +175,7 @@ private[rdd] class RealignIndels extends Serializable with Logging {
               (r, (originalQual, -1))
             }
           })
-          
+
           // sum all mismatch qualities to get the total mismatch quality for this alignment
           val totalQuality = sweptValues.map(_._2._1).reduce(_ + _)
 
@@ -204,12 +207,12 @@ private[rdd] class RealignIndels extends Serializable with Logging {
           readsToClean.foreach(r => {
 
             val remapping = bestMappings(r)
-            
+
             // if read alignment is improved by aligning against new consensus, realign
             if (remapping != -1) {
               // bump up mapping quality by 10
               r.setMapq(r.getMapq + 10)
-              
+
               // set new start to consider offset
               r.setStart(refStart + remapping)
 
@@ -218,15 +221,15 @@ private[rdd] class RealignIndels extends Serializable with Logging {
                 // if element overlaps with consensus indel, modify cigar with indel
                 val (idElement, endLength) = if(bestConsensus.index.head == bestConsensus.index.end) {
                   (new CigarElement(bestConsensus.consensus.length, CigarOperator.I),
-                   r.getSequence.length - bestConsensus.consensus.length - (bestConsensus.index.head - (refStart + remapping)))
+                    r.getSequence.length - bestConsensus.consensus.length - (bestConsensus.index.head - (refStart + remapping)))
                 } else {
                   (new CigarElement((bestConsensus.index.end - bestConsensus.index.head).toInt, CigarOperator.D),
-                   r.getSequence.length - (bestConsensus.index.head - (refStart + remapping)))
+                    r.getSequence.length - (bestConsensus.index.head - (refStart + remapping)))
                 }
 
                 val cigarElements = List[CigarElement](new CigarElement((refStart + remapping - bestConsensus.index.head).toInt, CigarOperator.M),
-                                                       idElement,
-                                                       new CigarElement(endLength.toInt, CigarOperator.M))
+                  idElement,
+                  new CigarElement(endLength.toInt, CigarOperator.M))
 
                 new Cigar(cigarElements)
               } else {
@@ -242,9 +245,9 @@ private[rdd] class RealignIndels extends Serializable with Logging {
           })
         }
       }
-       
-    // return all reads that we cleaned and all reads that were initially realigned
-    readsToClean ::: realignedReads
+
+      // return all reads that we cleaned and all reads that were initially realigned
+      readsToClean ::: realignedReads
     }
   }
 
@@ -283,7 +286,7 @@ private[rdd] class RealignIndels extends Serializable with Logging {
     var indelPos = -1
     var pos = 0
     var indelLength = 0
-    
+
     // find indel in cigar
     cigar.getCigarElements.map(elem => {
       elem.getOperator match {
@@ -300,10 +303,10 @@ private[rdd] class RealignIndels extends Serializable with Logging {
         case _ => pos += 1
       }
     })
-    
+
     /**
      * Shifts an indel left by n. Is tail call recursive.
-     * 
+     *
      * @param cigar Cigar to shift.
      * @param position Position of element to move.
      * @param shifts Number of bases to shift element.
@@ -340,14 +343,14 @@ private[rdd] class RealignIndels extends Serializable with Logging {
    * @return Tuple of (mismatch quality score, alignment offset).
    */
   def sweepReadOverReferenceForQuality (read: String, reference: String, qualities: Seq[Int]): (Int, Int) = {
-        
+
     var qualityScores = List[(Int, Int)]()
 
     // calculate mismatch quality score for all admissable alignment offsets
     for (i <- 0 until (reference.length - read.length)) {
       qualityScores = (sumMismatchQualityIgnoreCigar(read, reference.substring(i, i + read.length), qualities), i) :: qualityScores
     }
-    
+
     // perform reduction to get best quality offset
     qualityScores.reduce ((p1: (Int, Int), p2: (Int, Int)) => {
       if (p1._1 < p2._1) {
@@ -396,7 +399,7 @@ private[rdd] class RealignIndels extends Serializable with Logging {
    * @return Mismatch quality.
    */
   def sumMismatchQuality (cigar: Cigar, mdTag: MdTag, start: Long, phredQuals: Seq[Int]): Int = {
-    
+
     var referencePos = start
     var readPos = 0
     var mismatchQual = 0
@@ -404,16 +407,16 @@ private[rdd] class RealignIndels extends Serializable with Logging {
     // loop over cigar
     cigar.getCigarElements.foreach(cigarElement =>
       cigarElement.getOperator match {
-	case CigarOperator.M =>
+        case CigarOperator.M =>
           // if mismatch, accumulate phred quality score
-	  if (!mdTag.isMatch(referencePos)) {
-	    mismatchQual += phredQuals (readPos)
-	  }
+          if (!mdTag.isMatch(referencePos)) {
+            mismatchQual += phredQuals (readPos)
+          }
 
-	  readPos += 1
-	  referencePos += 1
-	case _ =>
-	  if (cigarElement.getOperator.consumesReadBases()) {
+          readPos += 1
+          referencePos += 1
+        case _ =>
+          if (cigarElement.getOperator.consumesReadBases()) {
             readPos += cigarElement.getLength
           }
           if (cigarElement.getOperator.consumesReferenceBases()) {

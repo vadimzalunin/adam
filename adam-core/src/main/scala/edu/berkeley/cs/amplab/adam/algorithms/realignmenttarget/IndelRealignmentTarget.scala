@@ -22,6 +22,8 @@ import scala.collection.immutable.{TreeSet, HashSet, NumericRange}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
 import org.apache.spark.Logging
+import scala.util.Sorting.quickSort
+import scala.collection.mutable
 
 
 object TargetOrdering extends Ordering[IndelRealignmentTarget] {
@@ -56,6 +58,17 @@ object TargetOrdering extends Ordering[IndelRealignmentTarget] {
   }
 
   /**
+   * Check to see if an indel realignment target contains the given read.
+   *
+   * @param target Realignment target to compare.
+   * @param read Read to compare.
+   * @return True if read alignment is contained in target span.
+   */
+  def contains (target: IndelRealignmentTarget, read: ADAMRecord) : Boolean = {
+    (target.getReadRange.start <= read.getStart) && (target.getReadRange.end >= read.end.get)
+  }
+
+  /**
    * Compares two indel realignment targets to see if they overlap.
    *
    * @param a Indel realignment target to compare.
@@ -63,12 +76,42 @@ object TargetOrdering extends Ordering[IndelRealignmentTarget] {
    * @return True if two targets overlap.
    */
   def overlap (a: IndelRealignmentTarget, b: IndelRealignmentTarget) : Boolean = {
+    // Note: the last two conditions were added for completeness; they should generally not
+    // be necessary although maybe in weird cases (indel on both reads in a mate pair that
+    // span a structural variant) and then one probably would not want to re-align these
+    // together.
+    // TODO: introduce an upper bound on re-align distance as GATK does??
     ((a.getReadRange.start >= b.getReadRange.start && a.getReadRange.start <= b.getReadRange.end) ||
-      (a.getReadRange.end >= b.getReadRange.start && a.getReadRange.end <= b.getReadRange.start))
+      (a.getReadRange.end >= b.getReadRange.start && a.getReadRange.end <= b.getReadRange.start) ||
+      (a.getReadRange.start >= b.getReadRange.start && a.getReadRange.end <= b.getReadRange.end) ||
+      (b.getReadRange.start >= a.getReadRange.start && b.getReadRange.end <= a.getReadRange.end))
   }
 }
 
-class IndelRange (indelRange: NumericRange[Long], readRange: NumericRange[Long]) {
+abstract class GenericRange(val readRange: NumericRange[Long]) {
+
+  def getReadRange (): NumericRange[Long] = readRange
+
+  def merge (r: GenericRange) : GenericRange
+
+  def compareRange (other : GenericRange) : Int
+
+  def compareReadRange (other : GenericRange) = {
+    if (readRange.start != other.getReadRange().start)
+      readRange.start.compareTo(other.getReadRange().start)
+    else
+      readRange.end.compareTo(other.getReadRange().end)
+  }
+}
+
+object IndelRange {
+  val emptyRange = IndelRange(
+    new NumericRange.Inclusive[Long](-1, -1, 1),
+    new NumericRange.Inclusive[Long](-1, -1, 1)
+  )
+}
+
+case class IndelRange (indelRange: NumericRange[Long], override val readRange: NumericRange[Long]) extends GenericRange(readRange) with Ordered[IndelRange] {
 
   /**
    * Merge two identical indel ranges.
@@ -76,19 +119,29 @@ class IndelRange (indelRange: NumericRange[Long], readRange: NumericRange[Long])
    * @param ir Indel range to merge in.
    * @return Merged range.
    */
-  def merge (ir: IndelRange) : IndelRange = {
-    assert(indelRange == ir.getIndelRange)
+  override def merge (ir: GenericRange) : IndelRange = {
+    if(this == IndelRange.emptyRange)
+      ir
+
+    assert(indelRange == ir.asInstanceOf[IndelRange].getIndelRange)
     // do not need to check read range - read range must contain indel range, so if
     // indel range is the same, read ranges will overlap
 
     new IndelRange (indelRange,
-      (readRange.start min ir.getReadRange.start) to (readRange.end max ir.getReadRange.end))
+      (readRange.start min ir.readRange.start) to (readRange.end max ir.readRange.end))
   }
 
   def getIndelRange (): NumericRange[Long] = indelRange
 
-  def getReadRange (): NumericRange[Long] = readRange
+  override def compareRange (other: GenericRange) : Int =
+    compare(other.asInstanceOf[IndelRange])
 
+  override def compare (other : IndelRange) : Int = {
+    if (indelRange.start != other.asInstanceOf[IndelRange].indelRange.start)
+      indelRange.start.compareTo(other.asInstanceOf[IndelRange].indelRange.start)
+    else
+      indelRange.end.compareTo(other.asInstanceOf[IndelRange].indelRange.end)
+  }
 }
 
 class IndelRangeSerializer extends Serializer[IndelRange] {
@@ -111,7 +164,14 @@ class IndelRangeSerializer extends Serializer[IndelRange] {
   }
 }
 
-class SNPRange (snpSite: Long, readRange: NumericRange[Long]) {
+object SNPRange {
+  val emptyRange = SNPRange(
+    -1L,
+    new NumericRange.Inclusive[Long](-1, -1, 1)
+  )
+}
+
+case class SNPRange (snpSite: Long, override val readRange: NumericRange[Long]) extends GenericRange(readRange) with Ordered[SNPRange] {
 
   /**
    * Merge two identical SNP sites.
@@ -119,19 +179,24 @@ class SNPRange (snpSite: Long, readRange: NumericRange[Long]) {
    * @param sr SNP range to merge in.
    * @return Merged SNP range.
    */
-  def merge (sr: SNPRange) : SNPRange = {
-    assert(snpSite == sr.getSNPSite)
+  override def merge (sr: GenericRange) : SNPRange = {
+    if(this == SNPRange.emptyRange)
+      sr
+
+    assert(snpSite == sr.asInstanceOf[SNPRange].getSNPSite)
     // do not need to check read range - read range must contain snp site, so if
     // snp site is the same, read ranges will overlap
 
     new SNPRange(snpSite,
-      (readRange.start min sr.getReadRange.start) to (readRange.end max sr.getReadRange.end))
+      (readRange.start min sr.readRange.start) to (readRange.end max sr.readRange.end))
   }
 
   def getSNPSite(): Long = snpSite
 
-  def getReadRange(): NumericRange[Long] = readRange
+  override def compare (other : SNPRange) = snpSite.compareTo(other.asInstanceOf[SNPRange].snpSite)
 
+  override def compareRange(other : GenericRange) : Int =
+    compare(other.asInstanceOf[SNPRange])
 }
 
 class SNPRangeSerializer extends Serializer[SNPRange] {
@@ -154,7 +219,7 @@ class SNPRangeSerializer extends Serializer[SNPRange] {
 
 object IndelRealignmentTarget {
 
-  // threshold for sauing whether a pileup contains sufficient mismatch evidence
+  // threshold for determining whether a pileup contains sufficient mismatch evidence
   val mismatchThreshold = 0.15
 
   /**
@@ -247,15 +312,30 @@ object IndelRealignmentTarget {
   }
 }
 
-class IndelRealignmentTarget(indelSet: Set[IndelRange], snpSet: Set[SNPRange]) extends Logging {
+class RangeAccumulator[T <: GenericRange] (val data : List[T], val previous : T) {
+  def accumulate (current: T) : RangeAccumulator[T] = {
+    if (previous == null)
+      new RangeAccumulator[T](data, current)
+    else
+      if (previous.compareRange(current) == 0)
+        new RangeAccumulator[T](data, previous.merge(current).asInstanceOf[T])
+      else
+        new RangeAccumulator[T](previous :: data, current)
+  }
+}
+
+class IndelRealignmentTarget(val indelSet: Set[IndelRange], val snpSet: Set[SNPRange]) extends Logging {
 
   initLogging()
 
   // the maximum range covered by either snps or indels
   // TODO (for Frank): think about what happens when either SNP or Indel range is empty, which
   // leads to readRange being null
-  def readRange = (indelSet.toList.map(_.getReadRange) ++ snpSet.toList.map(_.getReadRange))
-    .reduce((a: NumericRange[Long], b: NumericRange[Long]) => (a.start min b.start) to (a.end max b.end))
+  def readRange : NumericRange.Inclusive[Long] = {
+    (indelSet.toList.map(_.getReadRange) ++ snpSet.toList.map(_.getReadRange))
+      .reduce((a: NumericRange[Long], b: NumericRange[Long]) => (a.start min b.start) to (a.end max b.end))
+      .asInstanceOf[NumericRange.Inclusive[Long]]
+  }
 
   /**
    * Merges two indel realignment targets.
@@ -264,7 +344,21 @@ class IndelRealignmentTarget(indelSet: Set[IndelRange], snpSet: Set[SNPRange]) e
    * @return Merged target.
    */
   def merge(target: IndelRealignmentTarget): IndelRealignmentTarget = {
-    new IndelRealignmentTarget(indelSet ++ target.getIndelSet, snpSet ++ target.getSNPSet)
+
+    // TODO: this is unnecessarily wasteful; if the sets themselves
+    // were sorted (requires refactoring) we could achieve the same
+    // in a single merge (as in mergesort) operation. This should
+    // be done once correctness has been established
+    val currentIndelSet = indelSet.union(target.getIndelSet()).toArray
+    quickSort(currentIndelSet)
+
+    val accumulator : RangeAccumulator[IndelRange] = new RangeAccumulator[IndelRange](List(), null)
+    val newIndelSetAccumulated : RangeAccumulator[IndelRange] = currentIndelSet.foldLeft(accumulator) {
+      (acc, elem) => acc.accumulate(elem)
+    }
+
+    //new IndelRealignmentTarget(indelSet ++ target.getIndelSet, snpSet ++ target.getSNPSet)
+    new IndelRealignmentTarget(newIndelSetAccumulated.data.toSet + newIndelSetAccumulated.previous, snpSet ++ target.getSNPSet)
   }
 
   def isEmpty(): Boolean = {
