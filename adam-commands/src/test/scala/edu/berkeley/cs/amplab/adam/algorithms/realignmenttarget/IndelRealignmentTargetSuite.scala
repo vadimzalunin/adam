@@ -62,15 +62,20 @@ class IndelRealignmentTargetSuite extends SparkFunSuite {
     val range3 : IndelRange = new IndelRange(new NumericRange.Inclusive[Long](6, 14, 1),
       new NumericRange.Inclusive[Long](80, 90, 1)
     )
+    val range4 : IndelRange = new IndelRange(new NumericRange.Inclusive[Long](2, 4, 1),
+      new NumericRange.Inclusive[Long](60, 70, 1)
+    )
 
     val indelRanges1 = (range1 :: range2 :: List()).toSet
     val target1 = new IndelRealignmentTarget(indelRanges1, Set.empty[SNPRange])
-    val indelRanges2 = (range3 :: List()).toSet
+    val indelRanges2 = (range3 :: range4 :: List()).toSet
     val target2 = new IndelRealignmentTarget(indelRanges2, Set.empty[SNPRange])
     assert(target1.readRange.start === 1)
     assert(target1.readRange.end === 50)
     assert(TargetOrdering.overlap(target1, target1) === true)
     assert(TargetOrdering.overlap(target1, target2) === false)
+    assert(target2.getReadRange().start === 60)
+    assert(target2.getReadRange().end === 90)
   }
 
   sparkTest("extracting matches, mismatches and indels from mason reads") {
@@ -117,6 +122,8 @@ class IndelRealignmentTargetSuite extends SparkFunSuite {
   }
 
   sparkTest("creating targets for artificial reads") {
+    val artificial_pileup = artificial_rods.collect()
+    assert(artificial_pileup.size > 0)
     val targets_collected : Array[IndelRealignmentTarget] = RealignmentTargetFinder(artificial_reads).toArray
     // there are no SNPs in the artificial reads
     val only_SNPs = targets_collected.filter(_.getSNPSet() != Set.empty)
@@ -134,6 +141,7 @@ class IndelRealignmentTargetSuite extends SparkFunSuite {
     assert(indelsets(0).getIndelRange().start === 43)
     assert(indelsets(1).getIndelRange().start === 54)
     assert(indelsets(1).getIndelRange().start === 63)
+    //
   }
 
   sparkTest("creating SNP targets for mason reads") {
