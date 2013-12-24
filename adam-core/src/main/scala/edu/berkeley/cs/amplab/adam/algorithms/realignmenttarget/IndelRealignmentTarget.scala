@@ -128,19 +128,27 @@ case class IndelRange (indelRange: NumericRange[Long], override val readRange: N
     // indel range is the same, read ranges will overlap
 
     new IndelRange (indelRange,
-      (readRange.start min ir.readRange.start) to (readRange.end max ir.readRange.end))
+      new NumericRange.Inclusive[Long](
+        readRange.start min ir.readRange.start,
+        readRange.end max ir.readRange.end,
+        1)
+    )
   }
 
   def getIndelRange (): NumericRange[Long] = indelRange
 
   override def compareRange (other: GenericRange) : Int =
-    compare(other.asInstanceOf[IndelRange])
-
-  override def compare (other : IndelRange) : Int = {
     if (indelRange.start != other.asInstanceOf[IndelRange].indelRange.start)
       indelRange.start.compareTo(other.asInstanceOf[IndelRange].indelRange.start)
     else
       indelRange.end.compareTo(other.asInstanceOf[IndelRange].indelRange.end)
+
+  override def compare (other : IndelRange) : Int = {
+    val cmp = compareRange(other)
+    if (cmp != 0)
+      cmp
+    else
+      super.compareReadRange(other)
   }
 }
 
@@ -188,15 +196,26 @@ case class SNPRange (snpSite: Long, override val readRange: NumericRange[Long]) 
     // snp site is the same, read ranges will overlap
 
     new SNPRange(snpSite,
-      (readRange.start min sr.readRange.start) to (readRange.end max sr.readRange.end))
+      new NumericRange.Inclusive[Long](
+        readRange.start min sr.readRange.start,
+        readRange.end max sr.readRange.end,
+        1
+      )
+    )
   }
 
   def getSNPSite(): Long = snpSite
 
-  override def compare (other : SNPRange) = snpSite.compareTo(other.asInstanceOf[SNPRange].snpSite)
+  override def compare (other : SNPRange) : Int = {
+    val cmp = compareRange(other)
+    if (cmp != 0)
+      cmp
+    else
+      super.compareReadRange(other)
+  }
 
   override def compareRange(other : GenericRange) : Int =
-    compare(other.asInstanceOf[SNPRange])
+    snpSite.compareTo(other.asInstanceOf[SNPRange].snpSite)
 }
 
 class SNPRangeSerializer extends Serializer[SNPRange] {
@@ -240,13 +259,20 @@ object IndelRealignmentTarget {
       Option(pileup.getReadBase) match {
         case None => {
           // deletion
-          new IndelRange((pileup.getPosition.toLong - pileup.getRangeOffset.toLong) to (pileup.getPosition.toLong + pileup.getRangeLength.toLong - pileup.getRangeOffset.toLong - 1),
-            pileup.getReadStart.toLong to pileup.getReadEnd.toLong)
+          new IndelRange(
+            new NumericRange.Inclusive[Long](
+              pileup.getPosition.toLong - pileup.getRangeOffset.toLong,
+              pileup.getPosition.toLong + pileup.getRangeLength.toLong - pileup.getRangeOffset.toLong - 1,
+              1),
+            new NumericRange.Inclusive[Long](pileup.getReadStart.toLong, pileup.getReadEnd.toLong - 1, 1)
+          )
         }
         case Some(o) => {
           // insert
-          new IndelRange(pileup.getPosition.toLong to pileup.getPosition.toLong,
-            pileup.getReadStart.toLong to pileup.getReadEnd.toLong)
+          new IndelRange(
+            new NumericRange.Inclusive[Long](pileup.getPosition.toLong, pileup.getPosition.toLong, 1),
+            new NumericRange.Inclusive[Long](pileup.getReadStart.toLong, pileup.getReadEnd.toLong - 1, 1)
+          )
         }
       }
     }
@@ -258,7 +284,8 @@ object IndelRealignmentTarget {
      * @return SNP range.
      */
     def mapPoint(pileup: ADAMPileup): SNPRange = {
-      val range : NumericRange[Long] = pileup.getReadStart.toLong to pileup.getReadEnd.toLong
+      val range : NumericRange.Inclusive[Long] =
+        new NumericRange.Inclusive[Long](pileup.getReadStart.toLong, pileup.getReadEnd.toLong - 1, 1)
       new SNPRange(pileup.getPosition, range)
     }
 
@@ -267,6 +294,7 @@ object IndelRealignmentTarget {
     val matches = extractMatches(rod)
     val mismatches = extractMismatches(rod)
 
+    // TODO: this assumes Sanger encoding; how about older data? Should there be a property somewhere?
     // calculate the quality of the matches and the mismatches
     val matchQuality : Int =
       if (matches.size > 0)
@@ -329,12 +357,14 @@ class IndelRealignmentTarget(val indelSet: Set[IndelRange], val snpSet: Set[SNPR
   initLogging()
 
   // the maximum range covered by either snps or indels
-  // TODO (for Frank): think about what happens when either SNP or Indel range is empty, which
-  // leads to readRange being null
   def readRange : NumericRange.Inclusive[Long] = {
-    (indelSet.toList.map(_.getReadRange) ++ snpSet.toList.map(_.getReadRange))
-      .reduce((a: NumericRange[Long], b: NumericRange[Long]) => (a.start min b.start) to (a.end max b.end))
-      .asInstanceOf[NumericRange.Inclusive[Long]]
+    (
+      indelSet.toList.map(_.getReadRange.asInstanceOf[NumericRange.Inclusive[Long]]) ++
+      snpSet.toList.map(_.getReadRange.asInstanceOf[NumericRange.Inclusive[Long]])
+    ).reduce(
+      (a: NumericRange.Inclusive[Long], b: NumericRange.Inclusive[Long]) =>
+        new NumericRange.Inclusive[Long]((a.start min b.start), (a.end max b.end), 1)
+    )
   }
 
   /**
@@ -357,7 +387,6 @@ class IndelRealignmentTarget(val indelSet: Set[IndelRange], val snpSet: Set[SNPR
       (acc, elem) => acc.accumulate(elem)
     }
 
-    //new IndelRealignmentTarget(indelSet ++ target.getIndelSet, snpSet ++ target.getSNPSet)
     new IndelRealignmentTarget(newIndelSetAccumulated.data.toSet + newIndelSetAccumulated.previous, snpSet ++ target.getSNPSet)
   }
 
