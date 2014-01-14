@@ -80,6 +80,31 @@ private[rdd] object RealignIndels {
       mapToTarget (read, reducedSet)
     }
   }
+
+  /**
+   * From a set of reads, returns the reference sequence that they overlap.
+   */
+  def getReferenceFromReads (reads: Seq[ADAMRecord]): (String, Long, Long) = {
+    // get reference and range from a single read
+    val readRefs = reads.map((r: ADAMRecord) => {
+      (r.mdTag.getReference(r), r.getStart.toLong to r.end.get)
+    })
+      .sortBy(_._2.head)
+
+    // fold over sequences and append - sequence is sorted at start
+    val ref = readRefs.foldRight[(String,Long)](("", readRefs.head._2.head))((refReads: (String, NumericRange[Long]), reference: (String, Long)) => {
+      if (refReads._2.end < reference._2) {
+        reference
+      } else if (reference._2 >= refReads._2.head) {
+        (reference._1 + refReads._1.substring((reference._2 - refReads._2.head).toInt), refReads._2.end)
+      } else {
+        // there is a gap in the sequence
+        throw new IllegalArgumentException("Current sequence has a gap.")
+      }
+    })
+
+    (ref._1, readRefs.head._2.head, ref._2)
+  }
 }
 
 import RealignIndels._
@@ -141,6 +166,9 @@ private[rdd] class RealignIndels extends Serializable with Logging {
           realignedReads = r :: realignedReads
         }
       })
+
+      // TODO: check whether this improves or harms performance
+      consensus = consensus.distinct
 
       if(readsToClean.length > 0 && consensus.length > 0) {
 
@@ -249,31 +277,6 @@ private[rdd] class RealignIndels extends Serializable with Logging {
       // return all reads that we cleaned and all reads that were initially realigned
       readsToClean ::: realignedReads
     }
-  }
-
-  /**
-   * From a set of reads, returns the reference sequence that they overlap.
-   */
-  def getReferenceFromReads (reads: Seq[ADAMRecord]): (String, Long, Long) = {
-    // get reference and range from a single read
-    val readRefs = reads.map((r: ADAMRecord) => {
-      (r.mdTag.getReference(r), r.getStart.toLong to r.end.get)
-    })
-      .sortBy(_._2.head)
-
-    // fold over sequences and append - sequence is sorted at start
-    val ref = readRefs.foldRight[(String,Long)](("", readRefs.head._2.head))((refReads: (String, NumericRange[Long]), reference: (String, Long)) => {
-      if (refReads._2.end < reference._2) {
-        reference
-      } else if (reference._2 >= refReads._2.head) {
-        (reference._1 + refReads._1.substring((reference._2 - refReads._2.head).toInt), refReads._2.end)
-      } else {
-        // there is a gap in the sequence
-        throw new IllegalArgumentException("Current sequence has a gap.")
-      }
-    })
-
-    (ref._1, readRefs.head._2.head, ref._2)
   }
 
   /**

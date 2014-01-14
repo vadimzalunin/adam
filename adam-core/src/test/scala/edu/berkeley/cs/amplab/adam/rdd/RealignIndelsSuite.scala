@@ -57,12 +57,56 @@ class RealignIndelsSuite extends SparkFunSuite {
     assert(readsMappedToTarget.forall {
       case (target, reads) => reads.forall {
         read =>
-          if(read.getStart <= 30)
+          if(read.getStart < 25) // shouldn't all first mates be assigned to the target??? how about the one starting at 25?
             target.indelSet.size == 2
           else
             target.indelSet.size == 0
       }
     })
+  }
+
+  sparkTest("checking alternative consensus for artificial reads") {
+    var consensus = List[Consensus]()
+
+    // similar to realignTargetGroup() in RealignIndels
+    artificial_reads.collect().toList.foreach(r => {
+      if (r.mdTag.hasMismatches) {
+        consensus = Consensus.generateAlternateConsensus(r.getSequence, r.getStart, r.samtoolsCigar) match {
+          case Some(o) => o :: consensus
+          case None => consensus
+        }
+      }
+    }
+    )
+    consensus = consensus.distinct
+    assert(consensus.length > 0)
+    // Note: it seems that consensus ranges are non-inclusive
+    assert(consensus.get(0).index.start === 34)
+    assert(consensus.get(0).index.end === 44)
+    assert(consensus.get(0).consensus === "")
+    assert(consensus.get(1).index.start === 54)
+    assert(consensus.get(1).index.end === 64)
+    assert(consensus.get(1).consensus === "")
+    // TODO: add check with insertions, how about SNPs
+  }
+
+  sparkTest("checking extraction of reference from reads") {
+    val targets = RealignmentTargetFinder(artificial_reads)
+    val broadcastTargets = artificial_realigned_reads.context.broadcast(targets)
+    val readsMappedToTarget : RDD[Tuple2[IndelRealignmentTarget, Seq[ADAMRecord]]] = artificial_reads.groupBy(RealignIndels.mapToTarget(_, broadcastTargets.value))
+
+    readsMappedToTarget.collect().map {
+      case (target, reads) => {
+        val referenceFromReads : (String, Long, Long) =
+          if (reads.length > 0)
+            RealignIndels.getReferenceFromReads(reads)
+          else
+            ("", -1, -1)
+        assert(referenceFromReads._2 == -1 || referenceFromReads._1.length > 0)
+      }
+      case _ => {}
+    }
+    Console.println("ok")
   }
 
   sparkTest("checking realigned reads for artificial input") {

@@ -12,24 +12,25 @@ import edu.berkeley.cs.amplab.adam.rdd.RealignIndels
 
 class IndelRealignmentTargetSuite extends SparkFunSuite {
 
-  lazy val mason_reads: RDD[ADAMRecord] = {
+  // Note: this can't be lazy vals because Spark won't find the RDDs after the first test
+  def mason_reads: RDD[ADAMRecord] = {
     val path = ClassLoader.getSystemClassLoader.getResource("small_realignment_targets.sam").getFile
     sc.adamLoad[ADAMRecord, UnboundRecordFilter](path)
   }
 
-  lazy val mason_rods : RDD[Seq[ADAMPileup]] = {
+  def mason_rods : RDD[Seq[ADAMPileup]] = {
     mason_reads.adamRecords2Pileup()
       .groupBy(_.getPosition) // this we just do to match behaviour in IndelRealignerTargetFinder
       .sortByKey(ascending = true, numPartitions = 1)
       .map(_._2)
   }
 
-  lazy val artificial_reads: RDD[ADAMRecord] = {
+  def artificial_reads: RDD[ADAMRecord] = {
     val path = ClassLoader.getSystemClassLoader.getResource("artificial.sam").getFile
     sc.adamLoad[ADAMRecord, UnboundRecordFilter](path)
   }
 
-  lazy val artificial_rods : RDD[Seq[ADAMPileup]] = {
+  def artificial_rods : RDD[Seq[ADAMPileup]] = {
     artificial_reads.adamRecords2Pileup()
       .groupBy(_.getPosition) // this we just do to match behaviour in IndelRealignerTargetFinder
       .sortByKey(ascending = true, numPartitions = 1)
