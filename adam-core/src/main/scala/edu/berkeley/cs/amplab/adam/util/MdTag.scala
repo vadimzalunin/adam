@@ -20,7 +20,8 @@ import scala.collection.immutable.NumericRange
 import scala.util.matching.Regex
 import net.sf.samtools.{Cigar, CigarOperator, CigarElement}
 import edu.berkeley.cs.amplab.adam.avro.ADAMRecord
-import edu.berkeley.cs.amplab.adam.util.ImplicitJavaConversions._
+//import edu.berkeley.cs.amplab.adam.util.ImplicitJavaConversions._
+import edu.berkeley.cs.amplab.adam.rdd.AdamContext._
 import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord
 import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord._
 
@@ -157,20 +158,30 @@ class MdTag(
           // if we are a match, loop over bases in element
 	  for (i <- (0 until cigarElement.getLength)) {
             // if a mismatch, get from the mismatch set, else pull from read
-	    if (mismatches.contains(referencePos)) {
-	      reference += mismatches.get(referencePos)
-	    } else {
-	      reference += readSequence(readPos)
-	    }
+            if (mismatches.contains(referencePos)) {
+              reference += {
+                mismatches.get(referencePos) match {
+                  case Some(base) => base
+                  case _ => throw new IllegalStateException("Could not find mismatching base at cigar offset"+i)
+                }
+              }
+            } else {
+              reference += readSequence(readPos)
+            }
 
-	    readPos += 1
-	    referencePos += 1
-	  }
+                readPos += 1
+                referencePos += 1
+              }
 	}
 	case CigarOperator.D => {
           // if a delete, get from the delete pool
 	  for (i <- (0 until cigarElement.getLength)) {
-	    reference += deletes.get(referencePos)
+      reference += {
+        deletes.get(referencePos) match {
+          case Some(base) => base
+          case _ => throw new IllegalStateException("Could not find deleted base at cigar offset "+i)
+        }
+      }
 	    
 	    referencePos += 1
 	  }

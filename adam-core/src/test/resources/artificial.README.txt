@@ -13,7 +13,7 @@ samtools view -bS artificial.sam | samtools calmd - /home/andre/biotools/artific
 
 Observe pileup via:
 
-samtools mpileup -f artificial.fa artificial.bam | less
+samtools mpileup -BIf artificial.fa artificial.bam | less
 
 For comparison with GATK:
 
