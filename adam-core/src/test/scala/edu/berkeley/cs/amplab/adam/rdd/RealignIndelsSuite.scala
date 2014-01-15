@@ -22,26 +22,29 @@ import org.apache.spark.rdd.RDD
 import edu.berkeley.cs.amplab.adam.avro.ADAMRecord
 import parquet.filter.UnboundRecordFilter
 import edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget.RealignmentTargetFinder
+import edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget.IndelRealignmentTarget
+import edu.berkeley.cs.amplab.adam.models.Consensus
+import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord
 
 class RealignIndelsSuite extends SparkFunSuite {
 
-  lazy val mason_reads: RDD[ADAMRecord] = {
+  def mason_reads: RDD[ADAMRecord] = {
     val path = ClassLoader.getSystemClassLoader.getResource("small_realignment_targets.sam").getFile
     sc.adamLoad[ADAMRecord, UnboundRecordFilter](path)
   }
 
-  lazy val artificial_reads: RDD[ADAMRecord] = {
+  def artificial_reads: RDD[ADAMRecord] = {
     val path = ClassLoader.getSystemClassLoader.getResource("artificial.sam").getFile
     sc.adamLoad[ADAMRecord, UnboundRecordFilter](path)
   }
 
-  lazy val artificial_realigned_reads: RDD[ADAMRecord] = {
+  def artificial_realigned_reads: RDD[ADAMRecord] = {
     artificial_reads
       .adamRealignIndels()
       .adamSortReadsByReferencePosition()
   }
 
-  lazy val gatk_artificial_realigned_reads: RDD[ADAMRecord] = {
+  def gatk_artificial_realigned_reads: RDD[ADAMRecord] = {
     val path = ClassLoader.getSystemClassLoader.getResource("artificial.realigned.sam").getFile
     sc.adamLoad[ADAMRecord, UnboundRecordFilter](path)
   }
@@ -99,7 +102,7 @@ class RealignIndelsSuite extends SparkFunSuite {
       case (target, reads) => {
         val referenceFromReads : (String, Long, Long) =
           if (reads.length > 0)
-            RealignIndels.getReferenceFromReads(reads)
+            RealignIndels.getReferenceFromReads(reads.map(r => new RichADAMRecord(r)))
           else
             ("", -1, -1)
         assert(referenceFromReads._2 == -1 || referenceFromReads._1.length > 0)

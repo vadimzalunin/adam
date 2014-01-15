@@ -101,8 +101,72 @@ object MdTag {
     apply(mdTag, 0L)
   }
 
-  def apply(read: ADAMRecord, newCigar: Cigar): MdTag = {
-    apply(read.getMismatchingPositions, read.getStart).moveAlignment(read, newCigar)
+  def apply(read: RichADAMRecord, newCigar: Cigar): MdTag = {
+    //apply(read.getMismatchingPositions, read.getStart).moveAlignment(read, newCigar)
+    moveAlignment(read, newCigar)
+  }
+
+  /**
+   * Given a single read and an updated cigar element, recalculates the MDTag.
+   *
+   * @param read Record for current alignment.
+   * @param newCigar Realigned cigar string.
+   */
+  def moveAlignment (read: RichADAMRecord, newCigar: Cigar) : MdTag = {
+
+    val reference =  read.mdTag.getReference(read)
+    var referencePos = 0
+    var readPos = 0
+    var sequence = read.getSequence
+
+    var matches: List[NumericRange[Long]] = List[NumericRange[Long]]()
+    var mismatches: Map[Long, Char] = Map[Long, Char]()
+    var deletes: Map[Long, Char] = Map[Long, Char]()
+
+    // loop over cigar elements and fill sets
+    newCigar.getCigarElements.foreach(cigarElement => {
+      cigarElement.getOperator match {
+        case CigarOperator.M => {
+          var rangeStart = 0L
+          var rangeEnd = 0L
+
+          // dirty dancing to recalculate match sets
+          for (i <- 0 until cigarElement.getLength) {
+            if (reference(referencePos) == sequence(readPos)) {
+              rangeEnd = i.toLong
+            } else {
+              if (i != 0) {
+                matches = ((rangeStart + read.getStart) to (rangeEnd + read.getStart)) :: matches
+              }
+
+              rangeStart = (i + 1).toLong
+
+              mismatches += ((referencePos + read.getStart) -> reference(referencePos))
+            }
+
+            readPos += 1
+            referencePos += 1
+          }
+        }
+        case CigarOperator.D => {
+          for (i <- 0 until cigarElement.getLength) {
+            deletes += ((referencePos + read.getStart) -> reference(referencePos))
+
+            referencePos += 1
+          }
+        }
+        case _ => {
+          if (cigarElement.getOperator.consumesReadBases) {
+            readPos += cigarElement.getLength
+          }
+          if (cigarElement.getOperator.consumesReferenceBases) {
+            throw new IllegalArgumentException ("Cannot handle operator: " + cigarElement.getOperator)
+          }
+        }
+      }
+    })
+    // TODO: generate new MD string from updated MD tag.
+    new MdTag(matches, mismatches, deletes)
   }
 }
 
@@ -150,13 +214,13 @@ class MdTag(
     var referencePos = referenceFrom
     var readPos = 0
     var reference = ""
-    
+
     // loop over all cigar elements
     cigar.getCigarElements.foreach(cigarElement => {
       cigarElement.getOperator match {
-	case CigarOperator.M => {
+        case CigarOperator.M => {
           // if we are a match, loop over bases in element
-	  for (i <- (0 until cigarElement.getLength)) {
+          for (i <- (0 until cigarElement.getLength)) {
             // if a mismatch, get from the mismatch set, else pull from read
             if (mismatches.contains(referencePos)) {
               reference += {
@@ -169,98 +233,35 @@ class MdTag(
               reference += readSequence(readPos)
             }
 
-                readPos += 1
-                referencePos += 1
-              }
-	}
-	case CigarOperator.D => {
-          // if a delete, get from the delete pool
-	  for (i <- (0 until cigarElement.getLength)) {
-      reference += {
-        deletes.get(referencePos) match {
-          case Some(base) => base
-          case _ => throw new IllegalStateException("Could not find deleted base at cigar offset "+i)
+            readPos += 1
+            referencePos += 1
+          }
         }
-      }
-	    
-	    referencePos += 1
-	  }
-	}
-	case _ => {
+        case CigarOperator.D => {
+          // if a delete, get from the delete pool
+          for (i <- (0 until cigarElement.getLength)) {
+            reference += {
+              deletes.get(referencePos) match {
+                case Some(base) => base
+                case _ => throw new IllegalStateException("Could not find deleted base at cigar offset "+i)
+              }
+            }
+
+            referencePos += 1
+          }
+        }
+        case _ => {
           // ignore inserts
-	  if (cigarElement.getOperator.consumesReadBases) {
-	    readPos += cigarElement.getLength
-	  }
-	  if (cigarElement.getOperator.consumesReferenceBases) {
-	    throw new IllegalArgumentException ("Cannot handle operator: " + cigarElement.getOperator)
-	  }
-	}
+          if (cigarElement.getOperator.consumesReadBases) {
+            readPos += cigarElement.getLength
+          }
+          if (cigarElement.getOperator.consumesReferenceBases) {
+            throw new IllegalArgumentException ("Cannot handle operator: " + cigarElement.getOperator)
+          }
+        }
       }
     })
 
     reference
-  }
-
-  /**
-   * Given a single read and an updated cigar element, recalculates the MDTag.
-   *
-   * @param read Record for current alignment.
-   * @param newCigar Realigned cigar string.
-   */
-  def moveAlignment (read: ADAMRecord, newCigar: Cigar) : MdTag = {
-    
-    val reference = getReference(read)
-    var referencePos = 0
-    var readPos = 0
-    var sequence = read.getSequence
-
-    var matches: List[NumericRange[Long]] = List[NumericRange[Long]]()
-    var mismatches: Map[Long, Char] = Map[Long, Char]()
-    var deletes: Map[Long, Char] = Map[Long, Char]()
-
-    // loop over cigar elements and fill sets
-    newCigar.getCigarElements.foreach(cigarElement => {
-      cigarElement.getOperator match {
-	case CigarOperator.M => {
-	  var rangeStart = 0L
-	  var rangeEnd = 0L
-
-          // dirty dancing to recalculate match sets
-	  for (i <- 0 until cigarElement.getLength) {
-	    if (reference(referencePos) == sequence(readPos)) {
-	      rangeEnd = i.toLong
-	    } else {
-	      if (i != 0) {
-		matches = ((rangeStart + read.getStart) to (rangeEnd + read.getStart)) :: matches
-	      }
-
-	      rangeStart = (i + 1).toLong
-	    
-	      mismatches += ((referencePos + read.getStart) -> reference(referencePos))
-	    }
-
-	    readPos += 1
-	    referencePos += 1
-	  }
-	}
-	case CigarOperator.D => {
-	  for (i <- 0 until cigarElement.getLength) {
-	    deletes += ((referencePos + read.getStart) -> reference(referencePos))
-	    
-	    referencePos += 1
-	  }
-	}
-	case _ => {
-	  if (cigarElement.getOperator.consumesReadBases) {
-	    readPos += cigarElement.getLength
-	  }
-	  if (cigarElement.getOperator.consumesReferenceBases) {
-	    throw new IllegalArgumentException ("Cannot handle operator: " + cigarElement.getOperator)
-	  }
-	}
-      }
-    })    
-    // TODO: generate new MD string from updated MD tag.
-    new MdTag(matches, mismatches, deletes)
   }
 }

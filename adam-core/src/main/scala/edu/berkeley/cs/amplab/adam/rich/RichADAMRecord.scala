@@ -50,8 +50,7 @@ class RichADAMRecord(val record: ADAMRecord) {
     }
   }
 
-  // TODO: make Cigar immutable
-  var samtoolsCigar: Cigar = {
+  lazy val samtoolsCigar: Cigar = {
     RichADAMRecord.CIGAR_CODEC.decode(record.getCigar.toString)
   }
 
