@@ -57,15 +57,19 @@ class RealignIndelsSuite extends SparkFunSuite {
 
     assert(readsMappedToTarget.size > 0)
 
-    assert(readsMappedToTarget.forall {
-      case (target, reads) => reads.forall {
-        read =>
-          if(read.getStart < 25) // shouldn't all first mates be assigned to the target??? how about the one starting at 25?
-            target.indelSet.size == 2
-          else
-            target.indelSet.size == 0
+    readsMappedToTarget.forall {
+      case (target : IndelRealignmentTarget, reads : Seq[ADAMRecord]) => reads.forall {
+        read => {
+          if(read.getStart <= 25) {
+            var result : Boolean = (2 == target.indelSet.size.toInt)
+            result = result && (target.getReadRange().start.toLong <= read.start.toLong)
+            result && (target.getReadRange().end >= read.end.get - 1L)
+          } else {
+            (target.indelSet.size == 0)
+          }
       }
-    })
+      }
+    }
   }
 
   sparkTest("checking alternative consensus for artificial reads") {
@@ -96,9 +100,9 @@ class RealignIndelsSuite extends SparkFunSuite {
   sparkTest("checking extraction of reference from reads") {
     val targets = RealignmentTargetFinder(artificial_reads)
     val broadcastTargets = artificial_realigned_reads.context.broadcast(targets)
-    val readsMappedToTarget : RDD[Tuple2[IndelRealignmentTarget, Seq[ADAMRecord]]] = artificial_reads.groupBy(RealignIndels.mapToTarget(_, broadcastTargets.value))
+    val readsMappedToTarget : Array[Tuple2[IndelRealignmentTarget, Seq[ADAMRecord]]] = artificial_reads.groupBy(RealignIndels.mapToTarget(_, broadcastTargets.value)).collect()
 
-    readsMappedToTarget.collect().map {
+    readsMappedToTarget.map {
       case (target, reads) => {
         val referenceFromReads : (String, Long, Long) =
           if (reads.length > 0)

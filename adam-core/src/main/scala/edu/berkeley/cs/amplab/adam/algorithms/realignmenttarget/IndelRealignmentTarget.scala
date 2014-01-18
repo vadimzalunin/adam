@@ -65,7 +65,7 @@ object TargetOrdering extends Ordering[IndelRealignmentTarget] {
    * @return True if read alignment is contained in target span.
    */
   def contains (target: IndelRealignmentTarget, read: ADAMRecord) : Boolean = {
-    (target.getReadRange.start <= read.getStart) && (target.getReadRange.end >= read.end.get)
+    (target.getReadRange.start <= read.getStart) && (target.getReadRange.end >= read.end.get - 1) // -1 since read end is non-inclusive
   }
 
   /**
@@ -387,7 +387,10 @@ class IndelRealignmentTarget(val indelSet: Set[IndelRange], val snpSet: Set[SNPR
       (acc, elem) => acc.accumulate(elem)
     }
 
-    new IndelRealignmentTarget(newIndelSetAccumulated.data.toSet + newIndelSetAccumulated.previous, snpSet ++ target.getSNPSet)
+    if (newIndelSetAccumulated.previous == null) // without the if we end up with a singleton set with null as element
+      new IndelRealignmentTarget(newIndelSetAccumulated.data.toSet, snpSet ++ target.getSNPSet)
+    else
+      new IndelRealignmentTarget(newIndelSetAccumulated.data.toSet + newIndelSetAccumulated.previous, snpSet ++ target.getSNPSet)
   }
 
   def isEmpty(): Boolean = {

@@ -1,14 +1,17 @@
 
 package edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget
 
-import edu.berkeley.cs.amplab.adam.util.SparkFunSuite
-import edu.berkeley.cs.amplab.adam.avro.{ADAMPileup, ADAMRecord}
+import edu.berkeley.cs.amplab.adam.util.{MdTag, SparkFunSuite}
+import edu.berkeley.cs.amplab.adam.avro.{Base, ADAMPileup, ADAMRecord}
 import org.apache.spark.rdd.RDD
 import edu.berkeley.cs.amplab.adam.rdd.AdamContext._
 import org.apache.spark.SparkContext._
 import parquet.filter.UnboundRecordFilter
 import scala.collection.immutable.{NumericRange, TreeSet}
 import edu.berkeley.cs.amplab.adam.rdd.RealignIndels
+import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord
+import org.apache.spark.{TaskContext, Partition}
+import edu.berkeley.cs.amplab.adam.rdd.AdamContext._
 
 class IndelRealignmentTargetSuite extends SparkFunSuite {
 
@@ -37,6 +40,25 @@ class IndelRealignmentTargetSuite extends SparkFunSuite {
       .map(_._2)
   }
 
+  def make_read(start : Long, cigar : String, mdtag : String, length : Int, id : Int = 0) : ADAMRecord = {
+    val sequence : String = "A" * length
+    ADAMRecord.newBuilder()
+      .setReadName("read" + id.toString)
+      .setStart(start)
+      .setReadMapped(true)
+      .setCigar(cigar)
+      .setSequence(sequence)
+      .setReadNegativeStrand(false)
+      .setMapq(60)
+      .setQual(sequence) // no typo, we just don't care
+      .setMismatchingPositions(mdtag)
+      .build()
+  }
+
+  def make_pileup(reads : RDD[ADAMRecord]) : Array[Seq[ADAMPileup]] = {
+      reads.adamRecords2Pileup().groupBy(_.getPosition).sortByKey().map(_._2).collect()
+  }
+
   sparkTest("checking simple ranges") {
     val range1 : IndelRange = new IndelRange(new NumericRange.Inclusive[Long](1, 4, 1),
       new NumericRange.Inclusive[Long](1, 10, 1)
@@ -48,9 +70,11 @@ class IndelRealignmentTargetSuite extends SparkFunSuite {
 
     assert(range1 != range2)
     assert(range1.compareRange(range2) === 0)
-    assert(range1.compare(range2) === 0)
-    assert(range1.compareReadRange(range2) != 0)
+    assert(range1.compare(range2) === -1)
+    assert(range1.compareReadRange(range2) === -1)
     assert(range2.compareReadRange(range3) === 0)
+    assert(range1.merge(range2).getReadRange().start === 1)
+    assert(range1.merge(range2).getReadRange().end === 50)
   }
 
   sparkTest("checking simple realignment target") {
@@ -77,6 +101,100 @@ class IndelRealignmentTargetSuite extends SparkFunSuite {
     assert(TargetOrdering.overlap(target1, target2) === false)
     assert(target2.getReadRange().start === 60)
     assert(target2.getReadRange().end === 90)
+  }
+
+  sparkTest("creating simple target from read with deletion") {
+    val read = make_read(3L, "2M3D2M", "2^AAA2", 4)
+    val read_rdd : RDD[ADAMRecord] = sc.makeRDD(Seq(read), 1)
+    val targets = RealignmentTargetFinder(read_rdd)
+    assert(targets != null)
+    assert(targets.size === 1)
+    assert(targets.head.getIndelSet().head.indelRange.start === 5)
+    assert(targets.head.getIndelSet().head.indelRange.end === 7)
+    assert(targets.head.getIndelSet().head.readRange.start === 3)
+    assert(targets.head.getIndelSet().head.readRange.end === 9)
+  }
+
+  sparkTest("creating simple target from read with insertion") {
+    val read = make_read(3L, "2M3I2M", "4", 7)
+    val read_rdd : RDD[ADAMRecord] = sc.makeRDD(Seq(read), 1)
+    val targets = RealignmentTargetFinder(read_rdd)
+    assert(targets != null)
+    assert(targets.size === 1)
+    assert(targets.head.getIndelSet().head.indelRange.start === 5)
+    assert(targets.head.getIndelSet().head.indelRange.end === 5)
+    assert(targets.head.getIndelSet().head.readRange.start === 3)
+    assert(targets.head.getIndelSet().head.readRange.end === 6)
+  }
+
+  sparkTest("joining simple realignment targets") {
+    val range1 : IndelRange = new IndelRange(new NumericRange.Inclusive[Long](10, 15, 1),
+      new NumericRange.Inclusive[Long](1, 20, 1)
+    )
+    val range2 : IndelRange = new IndelRange(new NumericRange.Inclusive[Long](10, 15, 1),
+      new NumericRange.Inclusive[Long](6, 25, 1)
+    )
+    val target1 = new IndelRealignmentTarget((range1 :: List()).toSet, Set.empty[SNPRange])
+    val target2 = new IndelRealignmentTarget((range2 :: List()).toSet, Set.empty[SNPRange])
+    val merged_target = target1.merge(target2)
+    assert(merged_target.getReadRange().start === 1)
+    assert(merged_target.getReadRange().end === 25)
+    assert(merged_target.getIndelSet().toArray.apply(0).indelRange.start === 10)
+    assert(merged_target.getIndelSet().toArray.apply(0).indelRange.end === 15)
+    assert(merged_target.getIndelSet().toArray.apply(0).readRange.start === 1)
+    assert(merged_target.getIndelSet().toArray.apply(0).readRange.end === 25)
+  }
+
+  sparkTest("creating targets from three intersecting reads, same indel") {
+    val read1 = make_read(1L, "4M3D2M", "4^AAA2", 6)
+    val read2 = make_read(2L, "3M3D2M", "3^AAA2", 5)
+    val read3 = make_read(3L, "2M3D2M", "2^AAA2", 4)
+    val read_rdd : RDD[ADAMRecord] = sc.makeRDD(Seq(read1, read2, read3), 1)
+    val targets = RealignmentTargetFinder(read_rdd)
+    assert(targets != null)
+    assert(targets.size === 1)
+    assert(targets.head.getIndelSet().head.indelRange.start === 5)
+    assert(targets.head.getIndelSet().head.indelRange.end === 7)
+    assert(targets.head.getIndelSet().head.readRange.start === 1)
+    assert(targets.head.getIndelSet().head.readRange.end === 9)
+  }
+
+  sparkTest("creating targets from three intersecting reads, two different indel") {
+    val read1 = make_read(1L, "2M2D4M", "2^AA4", 6, 0)
+    val read2 = make_read(1L, "2M2D2M2D2M", "2^AA2^AA2", 6, 1)
+    val read3 = make_read(5L, "2M2D4M", "2^AA4", 6, 2)
+    val read_rdd : RDD[ADAMRecord] = sc.makeRDD(Seq(read1, read2, read3), 1)
+    val targets = RealignmentTargetFinder(read_rdd)
+    assert(targets != null)
+    assert(targets.size === 1)
+    val indels = targets.head.indelSet.toArray
+    assert(indels(0).indelRange.start === 3)
+    assert(indels(0).indelRange.end === 4)
+    assert(indels(0).readRange.start === 1)
+    assert(indels(0).readRange.end === 10)
+    assert(indels(1).indelRange.start === 7)
+    assert(indels(1).indelRange.end === 8)
+    assert(indels(1).readRange.start === 1)
+    assert(indels(1).readRange.end === 12)
+    assert(targets.head.getReadRange().start === 1)
+    assert(targets.head.getReadRange().end === 12)
+  }
+
+  sparkTest("creating targets from two disjoint reads") {
+    val read1 = make_read(1L, "2M2D2M", "2^AA2", 4)
+    val read2 = make_read(7L, "2M2D2M", "2^AA2", 4)
+    val read_rdd : RDD[ADAMRecord] = sc.makeRDD(Seq(read1, read2), 1)
+    val targets = RealignmentTargetFinder(read_rdd).toArray
+    assert(targets != null)
+    assert(targets.size === 2)
+    assert(targets(0).getIndelSet().head.indelRange.start === 3)
+    assert(targets(0).getIndelSet().head.indelRange.end === 4)
+    assert(targets(0).getIndelSet().head.readRange.start === 1)
+    assert(targets(0).getIndelSet().head.readRange.end === 6)
+    assert(targets(1).getIndelSet().head.indelRange.start === 9)
+    assert(targets(1).getIndelSet().head.indelRange.end === 10)
+    assert(targets(1).getIndelSet().head.readRange.start === 7)
+    assert(targets(1).getIndelSet().head.readRange.end === 12)
   }
 
   sparkTest("extracting matches, mismatches and indels from mason reads") {
@@ -122,8 +240,37 @@ class IndelRealignmentTargetSuite extends SparkFunSuite {
     // TODO: add read with more insertions, overlapping reads
   }
 
-  sparkTest("creating targets for artificial reads") {
-    val artificial_pileup = artificial_rods.collect()
+  sparkTest("creating targets for artificial reads: one-by-one") {
+    def check_indel(target : IndelRealignmentTarget, read : ADAMRecord) : Boolean = {
+      val indelRange : NumericRange[Long] = target.indelSet.head.getIndelRange()
+      read.start.toLong match {
+        case 5L => ((indelRange.start == 34) && (indelRange.end == 43))
+        case 10L => ((indelRange.start == 54) && (indelRange.end == 63))
+        case 15L => ((indelRange.start == 34) && (indelRange.end == 43))
+        case 20L => ((indelRange.start == 54) && (indelRange.end == 63))
+        case 25L => ((indelRange.start == 34) && (indelRange.end == 43))
+        case _ => false
+      }
+    }
+
+    val reads = artificial_reads.collect()
+    reads.foreach(
+      read => {
+        val read_rdd : RDD[ADAMRecord] = sc.makeRDD(Seq(read), 1)
+        val targets = RealignmentTargetFinder(read_rdd)
+        if (read.start < 105) {
+          assert(targets != null)
+          assert(targets.size === 1) // the later read mates do not have indels
+          assert(targets.head.getIndelSet().head.readRange.start === read.start)
+          assert(targets.head.getIndelSet().head.readRange.end === read.end.get - 1)
+          assert(check_indel(targets.head, read))
+        }
+      }
+    )
+  }
+
+  sparkTest("creating targets for artificial reads: all-at-once (merged)") {
+    val artificial_pileup = make_pileup(artificial_reads)
     assert(artificial_pileup.size > 0)
     val targets_collected : Array[IndelRealignmentTarget] = RealignmentTargetFinder(artificial_reads).toArray
     // there are no SNPs in the artificial reads
@@ -139,9 +286,9 @@ class IndelRealignmentTargetSuite extends SparkFunSuite {
     val indelsets = only_indels.head.getIndelSet().toArray
     // NOTE: this assumes the set is in sorted order, which seems to be the case
     assert(indelsets(0).getIndelRange().start === 34)
-    assert(indelsets(0).getIndelRange().start === 43)
+    assert(indelsets(0).getIndelRange().end === 43)
     assert(indelsets(1).getIndelRange().start === 54)
-    assert(indelsets(1).getIndelRange().start === 63)
+    assert(indelsets(1).getIndelRange().end === 63)
     //
   }
 
@@ -185,8 +332,9 @@ class IndelRealignmentTargetSuite extends SparkFunSuite {
     // the third read has a one base deletion
     assert(only_indels(1).getIndelSet().size === 1)
     assert(only_indels(1).getIndelSet().head.getIndelRange().start == 807755 && only_indels(1).getIndelSet().head.getIndelRange().end == 807755)
-    // read 7 has 4 deletions
-    assert(only_indels(5).getIndelSet().size === 4)
+    // read 7 has a single 4 bp deletion
+    assert(only_indels(5).getIndelSet().size === 1)
+    assert(only_indels(5).getIndelSet().head.getIndelRange().length === 4)
     assert(only_indels(5).getIndelSet().head.getIndelRange().start == 869644 && only_indels(5).getIndelSet().head.getIndelRange().end == 869647)
   }
 }
