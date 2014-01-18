@@ -211,7 +211,7 @@ class MdTag(
    */
   def getReference (readSequence: String, cigar: Cigar, referenceFrom: Long): String = {
 
-    var referencePos = referenceFrom
+    var referencePos = 0
     var readPos = 0
     var reference = ""
 

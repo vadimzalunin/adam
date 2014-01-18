@@ -31,15 +31,15 @@ object RichCigar {
 }
 
 class RichCigar (cigar: Cigar) {
-  
+
   lazy val numElements: Int = cigar.numCigarElements
 
   // number of alignment blocks is defined as the number of segments in the sequence that are a cigar match
   lazy val numAlignmentBlocks: Int = {
     cigar.getCigarElements.map (element => {
       element.getOperator match {
-	case CigarOperator.M => 1
-	case _ => 0
+        case CigarOperator.M => 1
+        case _ => 0
       }
     }).reduce (_ + _)
   }
@@ -51,7 +51,9 @@ class RichCigar (cigar: Cigar) {
    * @return New cigar with this element moved left.
    */
   def moveLeft (index: Int): Cigar = {
-    var elements = List[CigarElement]()
+    // var elements = List[CigarElement]()
+    // deepclone instead of empty list initialization
+    var elements = cigar.getCigarElements.map(e => new CigarElement(e.getLength, e.getOperator))
 
     /**
      * Moves an element of a cigar left.
@@ -64,16 +66,16 @@ class RichCigar (cigar: Cigar) {
       // TODO: should be TCR
       if (index == 0) {
         // if we are at the position to move, then we take one from it and add to the next element 
-	val elemMovedLeft = new CigarElement (cigarElements.head.getLength - 1, cigarElements.head.getOperator)
-	val elemPadded = Option(cigarElements.tail.head) match {
+        val elemMovedLeft = new CigarElement (cigarElements.head.getLength - 1, cigarElements.head.getOperator)
+        val elemPadded = Option(cigarElements.tail.head) match {
           // if there are no elements afterwards to pad, add a match operator with length 1 to the end
-	  case Some(o:CigarElement) => new CigarElement(o.getLength + 1, o.getOperator) :: cigarElements.tail.tail
-	  case _ => List (new CigarElement(1, CigarOperator.M))
-	}
-	
-	elemMovedLeft :: elemPadded
+          case Some(o:CigarElement) => new CigarElement(o.getLength + 1, o.getOperator) :: cigarElements.tail.tail
+          case _ => List (new CigarElement(1, CigarOperator.M))
+        }
+
+        elemMovedLeft :: elemPadded
       } else {
-	cigarElements.head :: moveCigarLeft (index - 1, cigarElements.tail)
+        cigarElements.head :: moveCigarLeft (index - 1, cigarElements.tail)
       }
     }
 
