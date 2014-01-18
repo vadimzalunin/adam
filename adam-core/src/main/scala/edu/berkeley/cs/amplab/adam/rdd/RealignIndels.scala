@@ -56,7 +56,7 @@ private[rdd] object RealignIndels {
    * @param targets Sorted set of realignment targets.
    * @return If overlapping target is found, returns that target. Else, returns the "empty" target.
    */
-  @tailrec final def mapToTarget (read: ADAMRecord,
+  @tailrec final def mapToTarget (read: RichADAMRecord,
                                   targets: TreeSet[IndelRealignmentTarget]): IndelRealignmentTarget = {
     // Perform tail call recursive binary search
     if (targets.size == 1) {
@@ -121,6 +121,53 @@ private[rdd] class RealignIndels extends Serializable with Logging {
   // log-odds threshold for entropy improvement for accepting a realignment
   val lodThreshold = 5.0
 
+  def findConsensus(reads : Seq[RichADAMRecord]) : Tuple3[List[RichADAMRecord], List[RichADAMRecord], List[Consensus]] = {
+    var realignedReads = List[RichADAMRecord]()
+    var readsToClean = List[RichADAMRecord]()
+    var consensus = List[Consensus]()
+
+    // loop across reads and triage/generate consensus sequences
+    reads.foreach(r => {
+      var cigar : Cigar = null
+      var mdTag : MdTag = null
+
+      // if there are two alignment blocks (sequence matches) then there is a single indel in the read
+      if (r.samtoolsCigar.numAlignmentBlocks == 2) {
+        // left align this indel and update the mdtag
+        //r.samtoolsCigar = leftAlignIndel(r.samtoolsCigar)
+        cigar = leftAlignIndel(r.samtoolsCigar)
+        mdTag = MdTag.moveAlignment(r, cigar)
+      }
+
+      mdTag = if (mdTag == null) r.mdTag else mdTag
+
+      if (mdTag.hasMismatches) {
+        val newRead : RichADAMRecord =
+          if (cigar != null) {
+            ADAMRecord.newBuilder(r).setCigar(cigar.toString).setMismatchingPositions(mdTag.toString).build()
+          } else {
+            ADAMRecord.newBuilder(r).build()
+          }
+        // we clean all reads that have mismatches
+        readsToClean = newRead :: readsToClean
+
+        // try to generate a consensus alignment - if a consensus exists, add it to our list of consensuses to test
+        consensus = Consensus.generateAlternateConsensus(newRead.getSequence, newRead.getStart, newRead.samtoolsCigar) match {
+          case Some(o) => o :: consensus
+          case None => consensus
+        }
+      } else {
+        // if the read does not have mismatches, then we needn't process it further
+        realignedReads = new RichADAMRecord(r) :: realignedReads
+      }
+    })
+
+    // TODO: check whether this improves or harms performance
+    consensus = consensus.distinct
+
+    new Tuple3(realignedReads, readsToClean, consensus)
+  }
+
   /**
    * Given a target group with an indel realignment target and a group of reads to realign, this method
    * generates read consensuses and realigns reads if a consensus leads to a sufficient improvement.
@@ -129,57 +176,16 @@ private[rdd] class RealignIndels extends Serializable with Logging {
    * @return A sequence of reads which have either been realigned if there is a sufficiently good alternative
    * consensus, or not realigned if there is not a sufficiently good consensus.
    */
-  def realignTargetGroup (targetGroup: (IndelRealignmentTarget, Seq[ADAMRecord])): Seq[RichADAMRecord] = {
+  def realignTargetGroup (targetGroup: (IndelRealignmentTarget, Seq[RichADAMRecord])): Seq[RichADAMRecord] = {
     val (target, reads) = targetGroup
+    var (realignedReads, readsToClean, consensus) = findConsensus(reads)
+
     if (target.isEmpty) {
       // if the indel realignment target is empty, do not realign
       reads.map(r => new RichADAMRecord(r))
     } else {
 
       var mismatchSum = 0L
-
-      var realignedReads = List[RichADAMRecord]()
-      var readsToClean = List[RichADAMRecord]()
-      var consensus = List[Consensus]()
-
-      // loop across reads and triage/generate consensus sequences
-      reads.foreach(r => {
-        var cigar : Cigar = null
-        var mdTag : MdTag = null
-
-        // if there are two alignment blocks (sequence matches) then there is a single indel in the read
-        if (r.samtoolsCigar.numAlignmentBlocks == 2) {
-          // left align this indel and update the mdtag
-          //r.samtoolsCigar = leftAlignIndel(r.samtoolsCigar)
-          cigar = leftAlignIndel(r.samtoolsCigar)
-          mdTag = MdTag.moveAlignment(r, r.samtoolsCigar)
-        }
-
-        //var newRead = null
-
-        if (r.mdTag.hasMismatches) {
-          val newRead : RichADAMRecord =
-            if (cigar != null && mdTag != null) {
-              ADAMRecord.newBuilder(r).setCigar(cigar.toString).setMismatchingPositions(mdTag.toString).build()
-            } else {
-              ADAMRecord.newBuilder(r).build()
-            }
-          // we clean all reads that have mismatches
-          readsToClean = newRead :: readsToClean
-
-          // try to generate a consensus alignment - if a consensus exists, add it to our list of consensuses to test
-          consensus = Consensus.generateAlternateConsensus(newRead.getSequence, newRead.getStart, newRead.samtoolsCigar) match {
-            case Some(o) => o :: consensus
-            case None => consensus
-          }
-        } else {
-          // if the read does not have mismatches, then we needn't process it further
-          realignedReads = new RichADAMRecord(r) :: realignedReads
-        }
-      })
-
-      // TODO: check whether this improves or harms performance
-      consensus = consensus.distinct
 
       if(readsToClean.length > 0 && consensus.length > 0) {
 
@@ -455,15 +461,16 @@ private[rdd] class RealignIndels extends Serializable with Logging {
    * @return Realigned read.
    */
   def realignIndels (rdd: RDD[ADAMRecord]): RDD[ADAMRecord] = {
-
+    // we only want to convert once so let's get it over with
+    val rich_rdd = rdd.map(new RichADAMRecord(_))
     // find realignment targets
     log.info("Generating realignment targets...")
     val targets = RealignmentTargetFinder(rdd)
 
     // group reads by target
     log.info("Grouping reads by target...")
-    val broadcastTargets = rdd.context.broadcast(targets)
-    val readsMappedToTarget = rdd.groupBy (mapToTarget(_, broadcastTargets.value))
+    val broadcastTargets = rich_rdd.context.broadcast(targets)
+    val readsMappedToTarget = rich_rdd.groupBy (mapToTarget(_, broadcastTargets.value))
 
     // realign target groups
     log.info("Sorting reads by reference in ADAM RDD")
