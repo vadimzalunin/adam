@@ -15,9 +15,9 @@
  */
 package edu.berkeley.cs.amplab.adam.models
 
-import edu.berkeley.cs.amplab.adam.avro.{ADAMVariant, ADAMGenotype, ADAMVariantDomain}
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext._
+import edu.berkeley.cs.amplab.adam.avro.{ADAMVariant, ADAMGenotype, ADAMVariantDomain}
 
 object ADAMVariantContext {
 
@@ -36,27 +36,42 @@ object ADAMVariantContext {
                                 variantDomains: Option[RDD[ADAMVariantDomain]] = None
                                  ): RDD[ADAMVariantContext] = {
     // group variants and genotypes by locus
-    val groupedVariants = variants.keyBy(_.getPosition.toLong).groupByKey
-    val groupedGenotypes = genotypes.keyBy(_.getPosition.toLong).groupByKey
+    val groupedVariants = variants.keyBy(v => {
+      val pos = v.getPosition.toLong
+      val refId = v.getReferenceId
+
+      new ReferencePosition(refId, pos)
+    }).groupByKey
+    val groupedGenotypes = genotypes.keyBy(v => {
+      val pos = v.getPosition.toLong
+      val refId = v.getReferenceId
+
+      new ReferencePosition(refId, pos)
+    }).groupByKey
 
     // perform initial merger of variants and genotypes
     val initialMerge = groupedVariants.join(groupedGenotypes)
       .filter(kv => !kv._2._1.isEmpty)
 
     // merge in variant domain
-    val mergeAfterDomain: RDD[(Long, (Seq[ADAMVariant], Seq[ADAMGenotype], Option[ADAMVariantDomain]))] = variantDomains match {
+    val mergeAfterDomain: RDD[(ReferencePosition, (Seq[ADAMVariant], Seq[ADAMGenotype], Option[ADAMVariantDomain]))] = variantDomains match {
       case Some(o) => {
         // if domains are present, group by locus
-        val groupedDomains = o.asInstanceOf[RDD[ADAMVariantDomain]].keyBy(_.getPosition.toLong)
+        val groupedDomains = o.asInstanceOf[RDD[ADAMVariantDomain]].keyBy(d => {
+          val pos = d.getPosition
+          val refId = d.getReferenceId
+
+          new ReferencePosition(refId, pos)
+        })
 
         // join with variant/genotype data and then flatten tuple
         initialMerge.join(groupedDomains)
-          .map((kv: (Long, ((Seq[ADAMVariant], Seq[ADAMGenotype]), ADAMVariantDomain))) => {
+          .map((kv: (ReferencePosition, ((Seq[ADAMVariant], Seq[ADAMGenotype]), ADAMVariantDomain))) => {
           (kv._1, (kv._2._1._1, kv._2._1._2, Option(kv._2._2)))
         })
       }
       case None => {
-        initialMerge.map((kv: (Long, (Seq[ADAMVariant], Seq[ADAMGenotype]))) => {
+        initialMerge.map((kv: (ReferencePosition, (Seq[ADAMVariant], Seq[ADAMGenotype]))) => {
           (kv._1, (kv._2._1, kv._2._2, None.asInstanceOf[Option[ADAMVariantDomain]]))
         })
       }
@@ -73,7 +88,7 @@ object ADAMVariantContext {
    *           optional domain annotation at site))
    * @return ADAMVariantContext corresponding to the data above.
    */
-  private def apply(kv: (Long, (Seq[ADAMVariant], Seq[ADAMGenotype], Option[ADAMVariantDomain]))
+  private def apply(kv: (ReferencePosition, (Seq[ADAMVariant], Seq[ADAMGenotype], Option[ADAMVariantDomain]))
                      ): ADAMVariantContext = {
     new ADAMVariantContext(kv._1, kv._2._1, kv._2._2, kv._2._3)
   }
@@ -95,7 +110,7 @@ object ADAMVariantContext {
  * - rdd/AdamContext.scala --> adamVariantLoad function
  * - If there is a corresponding conversion of that data between VCF and ADAM, commands/VariantContextConverter.scala
  */
-case class ADAMVariantContext(position: Long,
+case class ADAMVariantContext(position: ReferencePosition,
                               variants: Seq[ADAMVariant],
                               genotypes: Seq[ADAMGenotype],
                               domains: Option[ADAMVariantDomain]) {
