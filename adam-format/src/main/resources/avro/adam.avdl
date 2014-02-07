@@ -67,13 +67,6 @@ record ADAMRecord {
     union { null, string } mateReferenceUrl = null;
 }
 
-record ADAMFastaFragment {
-    union {null, string } description = null;
-    union {null, long } start = null;
-    union {null, long } end = null;
-    union {null, string } sequence = null;
-}
-
 enum Base {
     A,
     C,
@@ -92,6 +85,14 @@ enum Base {
     V, // not T
     H, // not G
     D  // not C
+}
+
+record ADAMFastaNucleotideContig {
+    union { null, string } contigName = null;
+    union { null, int } contigId = null;
+    union { null, string } description = null;
+    array<Base> sequence;
+    union { null, long } sequenceLength = null;
 }
 
 record ADAMPileup {
