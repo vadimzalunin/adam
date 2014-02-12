@@ -60,8 +60,6 @@ class AdamRDDFunctions[T <% SpecificRecord : Manifest](rdd: RDD[T]) extends Seri
 }
 
 class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends Serializable with Logging {
-  initLogging()
-
   def adamSortReadsByReferencePosition(): RDD[ADAMRecord] = {
     log.info("Sorting reads by reference position")
 
@@ -194,8 +192,6 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends Serializable with Log
 }
 
 class AdamPileupRDDFunctions(rdd: RDD[ADAMPileup]) extends Serializable with Logging {
-  initLogging()
-
   /**
    * Aggregates pileup bases together.
    *
@@ -224,8 +220,6 @@ class AdamPileupRDDFunctions(rdd: RDD[ADAMPileup]) extends Serializable with Log
 }
 
 class AdamRodRDDFunctions(rdd: RDD[ADAMRod]) extends Serializable with Logging {
-  initLogging()
-
   /**
    * Given an RDD of rods, splits the rods up by the specific sample they correspond to.
    * Returns a flat RDD.
