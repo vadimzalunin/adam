@@ -66,7 +66,7 @@ class NormalizationUtilsSuite extends FunSuite {
 
     println(new_cigar)
     assert(new_cigar.toString == "10M10D10M")
-    assert(read.samtoolsCigar.getReadLength === new_cigar.getReadLength)
+    assert(RichADAMRecord(read).samtoolsCigar.getReadLength === new_cigar.getReadLength)
   }
 
   test("shift an indel left by 0 in a cigar") {
