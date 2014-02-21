@@ -25,12 +25,11 @@ import edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget.{RealignmentTarg
                                                                  TargetOrdering,
                                                                  ZippedTargetOrdering}
 import org.apache.spark.broadcast.Broadcast
-import scala.collection.immutable.TreeSet
 import edu.berkeley.cs.amplab.adam.util.ImplicitJavaConversions
 import scala.annotation.tailrec
 import scala.collection.mutable.Map
 import net.sf.samtools.{Cigar, CigarOperator, CigarElement}
-import scala.collection.immutable.NumericRange
+import scala.collection.immutable.{NumericRange, TreeSet}
 import edu.berkeley.cs.amplab.adam.models.Consensus
 import edu.berkeley.cs.amplab.adam.util.ImplicitJavaConversions._
 import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord
@@ -65,7 +64,7 @@ private[rdd] object RealignIndels {
    * @see mapTargets
    */
   @tailrec final def mapToTarget (read: RichADAMRecord,
-                                  targets: TreeSet[(IndelRealignmentTarget, Int)]): Int = {
+                                  targets: TreeSet[Tuple2[IndelRealignmentTarget, Int]]): Int = {
     // Perform tail call recursive binary search
     if (targets.size == 1) {
       if (TargetOrdering.contains (targets.head._1, read)) {
@@ -99,7 +98,7 @@ private[rdd] object RealignIndels {
    * 
    * @see mapTargets
    */
-  def mapToTarget (targetIndex: Int, targets: TreeSet[(IndelRealignmentTarget, Int)]): IndelRealignmentTarget = {
+  def mapToTarget (targetIndex: Int, targets: TreeSet[Tuple2[IndelRealignmentTarget, Int]]): IndelRealignmentTarget = {
     if (targetIndex < 0) {
       IndelRealignmentTarget.emptyTarget()
     } else {
@@ -123,7 +122,7 @@ private[rdd] object RealignIndels {
    */
   def mapTargets (rich_rdd: RDD[RichADAMRecord], targets: TreeSet[IndelRealignmentTarget]): RDD[(IndelRealignmentTarget, Seq[RichADAMRecord])] = {
     val tmpZippedTargets = targets.zip(0 until targets.count(t => true))
-    var tmpZippedTargets2 = new TreeSet[(IndelRealignmentTarget, Int)]()(ZippedTargetOrdering)
+    var tmpZippedTargets2 = new TreeSet[Tuple2[IndelRealignmentTarget, Int]]()(ZippedTargetOrdering)
     tmpZippedTargets.foreach(t => tmpZippedTargets2 = tmpZippedTargets2 + t)
     val zippedTargets = tmpZippedTargets2
     
@@ -436,7 +435,9 @@ private[rdd] class RealignIndels extends Serializable with Logging {
    */
   def realignIndels (rdd: RDD[ADAMRecord]): RDD[ADAMRecord] = {
     // we only want to convert once so let's get it over with
-    val rich_rdd = rdd.map(new RichADAMRecord(_))
+    val rich_rdd = rdd.filter(r => r.getReadMapped && r.getPrimaryAlignment)
+      .map(new RichADAMRecord(_))
+
     // find realignment targets
     log.info("Generating realignment targets...")
     val targets: TreeSet[IndelRealignmentTarget] = RealignmentTargetFinder(rdd)
