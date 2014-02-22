@@ -228,8 +228,14 @@ private[rdd] class RealignIndels extends Serializable with Logging {
       // if there are two alignment blocks (sequence matches) then there is a single indel in the read
       if (r.samtoolsCigar.numAlignmentBlocks == 2) {
         // left align this indel and update the mdtag
-        cigar = leftAlignIndel(r)
-        mdTag = MdTag.moveAlignment(r, cigar)
+        try {
+          cigar = leftAlignIndel(r)
+          mdTag = MdTag.moveAlignment(r, cigar)
+        } catch {
+          case _ : Throwable => {
+            log.warn("Left normalization failed for :" + r)
+          }
+        }
       }
 
       mdTag = if (mdTag == null) r.mdTag.get else mdTag
