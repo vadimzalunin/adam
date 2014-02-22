@@ -434,13 +434,39 @@ class IndelRealignmentTarget(val indelSet: Set[IndelRange], val snpSet: Set[SNPR
 
 }
 
-class TreeSetSerializer extends Serializer[TreeSet[IndelRealignmentTarget]] {
+class TargetSetSerializer extends Serializer[TargetSet] {
 
-  def write (kryo: Kryo, output: Output, obj: TreeSet[IndelRealignmentTarget]) = {
-    kryo.writeClassAndObject(output, obj.toList)
+  def write (kryo: Kryo, output: Output, obj: TargetSet) = {
+    kryo.writeClassAndObject(output, obj.set.toList)
   }
 
-  def read (kryo: Kryo, input: Input, klazz: Class[TreeSet[IndelRealignmentTarget]]) : TreeSet[IndelRealignmentTarget] = {
-    new TreeSet()(TargetOrdering).union(kryo.readClassAndObject(input).asInstanceOf[List[IndelRealignmentTarget]].toSet)
+  def read (kryo: Kryo, input: Input, klazz: Class[TargetSet]) : TargetSet = {
+    new TargetSet(new TreeSet()(TargetOrdering)
+      .union(kryo.readClassAndObject(input).asInstanceOf[List[IndelRealignmentTarget]].toSet))
   }
+}
+
+class ZippedTargetSetSerializer extends Serializer[ZippedTargetSet] {
+
+  def write (kryo: Kryo, output: Output, obj: ZippedTargetSet) = {
+    kryo.writeClassAndObject(output, obj.set.toList)
+  }
+
+  def read (kryo: Kryo, input: Input, klazz: Class[ZippedTargetSet]) : ZippedTargetSet = {
+    new ZippedTargetSet(new TreeSet()(ZippedTargetOrdering)
+      .union(kryo.readClassAndObject(input).asInstanceOf[List[(IndelRealignmentTarget, Int)]].toSet))
+  }
+}
+
+object TargetSet {
+  def apply(): TargetSet = {
+    new TargetSet(TreeSet[IndelRealignmentTarget]()(TargetOrdering))
+  }
+}
+
+// These two case classes are needed to get around some serialization issues
+case class TargetSet (set: TreeSet[IndelRealignmentTarget]) extends Serializable {
+}
+
+case class ZippedTargetSet (set: TreeSet[(IndelRealignmentTarget, Int)]) extends Serializable {
 }

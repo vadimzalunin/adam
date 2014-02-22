@@ -23,7 +23,9 @@ import edu.berkeley.cs.amplab.adam.avro.ADAMRecord
 import edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget.{RealignmentTargetFinder,
                                                                  IndelRealignmentTarget,
                                                                  TargetOrdering,
-                                                                 ZippedTargetOrdering}
+                                                                 ZippedTargetOrdering,
+                                                                 TargetSet,
+                                                                 ZippedTargetSet}
 import org.apache.spark.broadcast.Broadcast
 import edu.berkeley.cs.amplab.adam.util.ImplicitJavaConversions
 import scala.annotation.tailrec
@@ -56,6 +58,8 @@ private[rdd] object RealignIndels {
    * target and should be realigned, else returns the "empty" target (denoted by a negative index).
    * 
    * @note Generally, this function shouldn't be called directly---for most cases, prefer mapTargets.
+   * @note This function should not be called in a context where target set serialization is needed.
+   * Instead, call mapToTarget(RichADAMRecord, ZippedTargetSet), which wraps this function.
    * 
    * @param read Read to check.
    * @param targets Sorted set of realignment targets.
@@ -88,9 +92,26 @@ private[rdd] object RealignIndels {
   }
 
   /**
+   * This method wraps mapToTarget(RichADAMRecord, TreeSet[Tuple2[IndelRealignmentTarget, Int]]) for
+   * serialization purposes.
+   *
+   * @param read Read to check.
+   * @param targets Wrapped zipped indel realignment target.
+   * @return Target if an overlapping target is found, else the empty target.
+   *
+   * @see mapTargets
+   */
+  def mapToTarget (read: RichADAMRecord,
+                   targets: ZippedTargetSet): Int = {
+    mapToTarget(read, targets.set)
+  }
+
+  /**
    * Method to map a target index to an indel realignment target.
    *
    * @note Generally, this function shouldn't be called directly---for most cases, prefer mapTargets.
+   * @note This function should not be called in a context where target set serialization is needed.
+   * Instead, call mapToTarget(Int, ZippedTargetSet), which wraps this function.
    *
    * @param int Index of target.
    * @param targets Set of realignment targets.
@@ -98,12 +119,27 @@ private[rdd] object RealignIndels {
    * 
    * @see mapTargets
    */
-  def mapToTarget (targetIndex: Int, targets: TreeSet[Tuple2[IndelRealignmentTarget, Int]]): IndelRealignmentTarget = {
+  def mapToTarget (targetIndex: Int, 
+                   targets: TreeSet[Tuple2[IndelRealignmentTarget, Int]]): IndelRealignmentTarget = {
     if (targetIndex < 0) {
       IndelRealignmentTarget.emptyTarget()
     } else {
       targets.filter(p => p._2 == targetIndex).head._1
     }
+  }
+
+  /**
+   * Wrapper for mapToTarget(Int, TreeSet[Tuple2[IndelRealignmentTarget, Int]]) for contexts where
+   * serialization is needed.
+   *
+   * @param int Index of target.
+   * @param targets Set of realignment targets.
+   * @return Indel realignment target.
+   * 
+   * @see mapTargets
+   */
+  def mapToTarget (targetIndex: Int, targets: ZippedTargetSet): IndelRealignmentTarget = {
+    mapToTarget(targetIndex, targets.set)
   }
 
   /**
@@ -124,7 +160,7 @@ private[rdd] object RealignIndels {
     val tmpZippedTargets = targets.zip(0 until targets.count(t => true))
     var tmpZippedTargets2 = new TreeSet[Tuple2[IndelRealignmentTarget, Int]]()(ZippedTargetOrdering)
     tmpZippedTargets.foreach(t => tmpZippedTargets2 = tmpZippedTargets2 + t)
-    val zippedTargets = tmpZippedTargets2
+    val zippedTargets = new ZippedTargetSet(tmpZippedTargets2)
     
     // group reads by target
     val broadcastTargets = rich_rdd.context.broadcast(zippedTargets)
@@ -392,9 +428,9 @@ private[rdd] class RealignIndels extends Serializable with Logging {
   }
 
   /**
-   * Sums the mismatch quality of a read against a reference. Mismatch quality is defined as the sum of the base
-   * quality for all bases in the read that do not match the reference. This method ignores the cigar string, which
-   * treats indels as causing mismatches.
+   * Sums the mismatch quality of a read against a reference. Mismatch quality is defined as the sum
+   * of the base quality for all bases in the read that do not match the reference. This method
+   * ignores the cigar string, which treats indels as causing mismatches.
    *
    * @param read Read to evaluate.
    * @param reference Reference sequence to look for mismatches against.
@@ -415,7 +451,8 @@ private[rdd] class RealignIndels extends Serializable with Logging {
   }
 
   /**
-   * Given a read, sums the mismatch quality against it's current alignment position. Does NOT ignore cigar.
+   * Given a read, sums the mismatch quality against it's current alignment position.
+   * Does NOT ignore cigar.
    *
    * @param read Read over which to sum mismatch quality.
    * @return Mismatch quality of read for current alignment.
