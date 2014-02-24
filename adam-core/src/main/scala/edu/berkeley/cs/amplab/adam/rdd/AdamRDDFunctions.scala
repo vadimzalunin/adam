@@ -104,8 +104,15 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends Serializable with Log
     RecalibrateBaseQualities(rdd, broadcastDbSNP)
   }
 
-  def adamRealignIndels(): RDD[ADAMRecord] = {
-    RealignIndels(rdd)
+  /**
+   * Runs indel realignment, including target generation.
+   *
+   * @param isSorted Whether data is sorted. If the RDD is not sorted, we will sort internally.
+   * Default value is false (data is unsorted)
+   * @return An RDD of locally realigned reads.
+   */
+  def adamRealignIndels(isSorted: Boolean = false): RDD[ADAMRecord] = {
+    RealignIndels(rdd, isSorted)
   }
 
   // Returns a tuple of (failedQualityMetrics, passedQualityMetrics)
@@ -152,14 +159,18 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends Serializable with Log
      * @return List containing one or two mapping key/value pairs.
      */
     def mapToBucket (r: ADAMRecord): List[(ReferencePosition, ADAMRecord)] = {
-      val s = r.getStart / bucketSize
-      val e = r.end.get / bucketSize
-      val id = r.getReferenceId
+      try {
+        val s = r.getStart / bucketSize
+        val e = r.end.get / bucketSize
+        val id = r.getReferenceId
 
       if (s == e) {
         List((new ReferencePosition(id, s), r))
       } else {
         List((new ReferencePosition(id, s), r), (new ReferencePosition(id, e), r))
+      }
+      } catch {
+        case _ : Throwable => List()
       }
     }
 

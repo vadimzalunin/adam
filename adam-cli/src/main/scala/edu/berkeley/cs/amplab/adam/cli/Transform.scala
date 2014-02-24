@@ -79,15 +79,15 @@ class Transform(protected val args: TransformArgs) extends AdamSparkCommand[Tran
       adamRecords = adamRecords.adamBQSR(dbSNP)
     }
 
-    if (args.locallyRealign) {
-      log.info("Locally realigning indels.")
-      adamRecords = adamRecords.adamRealignIndels()
-    }
-
     // NOTE: For now, sorting needs to be the last transform
     if (args.sortReads) {
       log.info("Sorting reads")
       adamRecords = adamRecords.adamSortReadsByReferencePosition()
+    }
+
+    if (args.locallyRealign) {
+      log.info("Locally realigning indels.")
+      adamRecords = adamRecords.adamRealignIndels(args.sortReads)
     }
 
     adamRecords.adamSave(args.outputPath, blockSize = args.blockSize, pageSize = args.pageSize,

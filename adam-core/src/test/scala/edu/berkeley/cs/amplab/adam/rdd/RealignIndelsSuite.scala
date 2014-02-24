@@ -133,7 +133,7 @@ class RealignIndelsSuite extends SparkFunSuite {
   }
 
   sparkTest("checking search for consensus list for artitifical reads") {
-    val (realignedReads, readsToClean, consensus) = (new RealignIndels()).findConsensus(artificial_reads.map(new RichADAMRecord(_))
+    val (realignedReads, readsToClean, consensus) = (new RealignIndels(false, 3000, 30, 5.0)).findConsensus(artificial_reads.map(new RichADAMRecord(_))
                                                                                                         .collect()
                                                                                                         .toSeq)
 
@@ -166,7 +166,7 @@ class RealignIndelsSuite extends SparkFunSuite {
   }
 
   sparkTest("test mismatch quality scoring") {
-    val ri = new RealignIndels
+    val ri = new RealignIndels(false, 3000, 30, 5.0)
     val read = "AAAAAAAA"
     val ref =  "AAGGGGAA"
     val qScores = Seq(40, 40, 40, 40, 40, 40, 40, 40)
@@ -175,7 +175,7 @@ class RealignIndelsSuite extends SparkFunSuite {
   }
 
   sparkTest("test mismatch quality scoring for no mismatches") {
-    val ri = new RealignIndels
+    val ri = new RealignIndels(false, 3000, 30, 5.0)
     val read = "AAAAAAAA"
     val qScores = Seq(40, 40, 40, 40, 40, 40, 40, 40)
     
@@ -183,7 +183,7 @@ class RealignIndelsSuite extends SparkFunSuite {
   }
 
   sparkTest("test mismatch quality scoring after unpacking read") {
-    val ri = new RealignIndels
+    val ri = new RealignIndels(false, 3000, 30, 5.0)
     val read = artificial_reads.first
     
     assert(ri.sumMismatchQuality(read) === 800)

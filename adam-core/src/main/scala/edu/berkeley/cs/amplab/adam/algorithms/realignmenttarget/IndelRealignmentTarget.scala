@@ -17,6 +17,7 @@
 package edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget
 
 import edu.berkeley.cs.amplab.adam.avro.{ADAMPileup, ADAMRecord}
+import edu.berkeley.cs.amplab.adam.models.ADAMRod
 import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord._
 import scala.collection.immutable.{TreeSet, HashSet, NumericRange}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
@@ -252,6 +253,16 @@ object IndelRealignmentTarget {
 
   // threshold for determining whether a pileup contains sufficient mismatch evidence
   val mismatchThreshold = 0.15
+
+  /**
+   * Generates an indel realignment target from a rod.
+   *
+   * @param rod Base pileup.
+   * @return Generated realignment target.
+   */
+  def apply(rod: ADAMRod): IndelRealignmentTarget = {
+    apply(rod.pileups)
+  }
 
   /**
    * Generates an indel realignment target from a pileup.
