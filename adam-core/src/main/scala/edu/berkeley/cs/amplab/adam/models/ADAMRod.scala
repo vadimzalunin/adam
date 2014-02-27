@@ -23,7 +23,7 @@ import edu.berkeley.cs.amplab.adam.avro.ADAMPileup
  * @param position Position on the reference genome.
  * @param pileups A list representing the bases at this locus.
  */
-case class ADAMRod(position: ReferencePosition, pileups: List[ADAMPileup]) {
+case class ADAMRod(position: ReferencePosition, pileups: Seq[ADAMPileup]) {
   // all bases must be at the same position
   require(pileups.forall(ReferencePosition(_) == position))
 
@@ -34,11 +34,11 @@ case class ADAMRod(position: ReferencePosition, pileups: List[ADAMPileup]) {
    *
    * @return A list of rods, each corresponding to a single sample.
    */
-  def splitBySamples(): List[ADAMRod] = {
+  def splitBySamples(): Seq[ADAMRod] = {
     if (isSingleSample) {
-      List(new ADAMRod(position, pileups))
+      Seq(new ADAMRod(position, pileups))
     } else {
-      pileups.groupBy(_.getRecordGroupSample).values.toList.map(pg => new ADAMRod(position, pg))
+      pileups.groupBy(_.getRecordGroupSample).values.toSeq.map(pg => new ADAMRod(position, pg))
     }
   }
 

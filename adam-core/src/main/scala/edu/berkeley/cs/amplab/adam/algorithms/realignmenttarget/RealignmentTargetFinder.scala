@@ -93,7 +93,7 @@ class RealignmentTargetFinder extends Serializable with Logging {
   def findTargets (reads: RDD[ADAMRecord]): TargetSet = {
 
     // generate pileups from reads
-    val rods: RDD[ADAMRod] = reads.adamRecords2Rods(1000, true)
+    val rods: RDD[ADAMRod] = reads.adamRecords2Rods(true, true)
 
     def createTargetSet(target: IndelRealignmentTarget) : TargetSet = {
       val tmp = new TreeSet()(TargetOrdering)

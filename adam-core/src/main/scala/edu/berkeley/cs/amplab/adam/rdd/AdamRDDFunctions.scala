@@ -143,63 +143,36 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends Serializable with Log
    * Groups all reads by reference position, with all reference position bases grouped
    * into a rod.
    *
-   * @param bucketSize Size in basepairs of buckets. Larger buckets take more time per
-   * bucket to convert, but have lower skew. Default is 1000.
    * @param secondaryAlignments Creates rods for non-primary aligned reads. Default is false.
    * @return RDD of ADAMRods.
    */
-  def adamRecords2Rods (bucketSize: Int = 1000,
-                        secondaryAlignments: Boolean = false): RDD[ADAMRod] = {
+  def adamRecords2Rods (secondaryAlignments: Boolean = false,
+                        dataIsSorted: Boolean = false): RDD[ADAMRod] = {
     
-    /**
-     * Maps a read to one or two buckets. A read maps to a single bucket if both
-     * it's start and end are in a single bucket.
-     *
-     * @param r Read to map.
-     * @return List containing one or two mapping key/value pairs.
-     */
-    def mapToBucket (r: ADAMRecord): List[(ReferencePosition, ADAMRecord)] = {
-      try {
-        val s = r.getStart / bucketSize
-        val e = r.end.get / bucketSize
-        val id = r.getReferenceId
-
-      if (s == e) {
-        List((new ReferencePosition(id, s), r))
-      } else {
-        List((new ReferencePosition(id, s), r), (new ReferencePosition(id, e), r))
-      }
-      } catch {
-        case _ : Throwable => List()
-      }
+    // sort data if it isn't already sorted
+    val sortedRdd = if (dataIsSorted) {
+      rdd.cache
+    } else {
+      rdd.adamSortReadsByReferencePosition().cache
     }
 
-    println("Putting reads in buckets.")
-
-    val bucketedReads = rdd.filter(_.getStart != null)
-      .flatMap(mapToBucket)
-      .groupByKey()
-
-    println ("Have reads in buckets.")
+    // get sequence dictionary
+    val seqDict = sortedRdd.sequenceDictionary()
 
     val pp = new Reads2PileupProcessor(secondaryAlignments)
     
-    /**
-     * Converts all reads in a bucket into rods.
-     *
-     * @param bucket Tuple of (bucket number, reads in bucket).
-     * @return A sequence containing the rods in this bucket.
-     */
-    def bucketedReadsToRods (bucket: (ReferencePosition, Seq[ADAMRecord])): Seq[ADAMRod] = {
-      val (bucketStart, bucketReads) = bucket
+    // convert all partitions into pileups - preserves partitioning
+    val rddOfPileups = sortedRdd.mapPartitions(it => {
+      it.toList
+        .flatMap(pp.readToPileups)
+        .groupBy(v => ReferencePosition(v))
+        .toIterator
+    }, true)
 
-      bucketReads.flatMap(pp.readToPileups)
-        .groupBy(ReferencePosition(_))
-        .toList
-        .map(g => ADAMRod(g._1, g._2.toList)).toSeq
-    }
-
-    bucketedReads.flatMap(bucketedReadsToRods)
+    // group bases together and create rods
+    rddOfPileups.groupByKey(new GenomicRegionPartitioner(rddOfPileups.partitions.length,
+                                                         seqDict))
+      .map(kv => new ADAMRod(kv._1, kv._2.flatMap(l => l)))
   }
 
   /**
@@ -286,7 +259,7 @@ class AdamRodRDDFunctions(rdd: RDD[ADAMRod]) extends Serializable with Logging {
    *
    * @return Rods split up by samples and grouped together by position.
    */
-  def adamDivideRodsBySamples(): RDD[(ReferencePosition, List[ADAMRod])] = {
+  def adamDivideRodsBySamples(): RDD[(ReferencePosition, Seq[ADAMRod])] = {
     rdd.keyBy(_.position).map(r => (r._1, r._2.splitBySamples))
   }
 
