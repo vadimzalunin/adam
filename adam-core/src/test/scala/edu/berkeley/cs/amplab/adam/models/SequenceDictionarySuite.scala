@@ -151,7 +151,7 @@ class SequenceDictionarySuite extends FunSuite {
     assert(map(3) === 1)
   }
 
-  test("the additions + and += work correctly") {
+  test("the addition + works correctly") {
     val s1 = SequenceDictionary()
     val s2 = SequenceDictionary(record(1, "foo"))
     val s3 = SequenceDictionary(record(1, "foo"), record(2, "bar"))
@@ -159,18 +159,9 @@ class SequenceDictionarySuite extends FunSuite {
     assert(s1 + record(1, "foo") === s2)
     assert(s2 + record(1, "foo") === s2)
     assert(s2 + record(2, "bar") === s3)
-
-    s1 += record(1, "foo")
-    assert(s1 === s2)
-
-    s1 += record(1, "foo")
-    assert(s1 === s2)
-
-    s1 += record(2, "bar")
-    assert(s1 === s3)
   }
 
-  test("the append operations ++ and ++= work correctly") {
+  test("the append operation ++ works correctly") {
     val s1 = SequenceDictionary()
     val s2a = SequenceDictionary(record(1, "foo"))
     val s2b = SequenceDictionary(record(2, "bar"))
@@ -180,15 +171,6 @@ class SequenceDictionarySuite extends FunSuite {
     assert(s1 ++ s2a === s2a)
     assert(s1 ++ s2b === s2b)
     assert(s2a ++ s2b === s3)
-
-    s1 ++= s2a
-    assert(s1 === s2a)
-
-    s1 ++= s2b
-    assert(s1 === s3)
-
-    s1 ++= s3
-    assert(s1 === s3)
   }
 
   test("containsRefName works correctly") {

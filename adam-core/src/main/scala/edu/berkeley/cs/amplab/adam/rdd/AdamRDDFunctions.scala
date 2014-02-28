@@ -80,7 +80,6 @@ abstract class AdamSequenceDictionaryRDDAggregator[T](rdd: RDD[T]) extends Seria
    */
   def adamGetSequenceDictionary (): SequenceDictionary =
     rdd.flatMap(getSequenceRecordsFromElement(_))
-      .distinct()
       .aggregate(SequenceDictionary())(
       (dict: SequenceDictionary, rec: SequenceRecord) => dict + rec,
       (dict1: SequenceDictionary, dict2: SequenceDictionary) => dict1 ++ dict2)

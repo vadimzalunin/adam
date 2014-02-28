@@ -28,7 +28,7 @@ import scala.math.Ordering.Implicits._
  * SequenceDictionary contains the (bijective) map between Ints (the referenceId) and Strings (the referenceName)
  * from the header of a BAM file, or the combined result of multiple such SequenceDictionaries.
  */
-class SequenceDictionary(recordsIn: Iterable[SequenceRecord]) extends Serializable {
+class SequenceDictionary(recordsIn: Set[SequenceRecord]) extends Serializable {
 
   // Intermediate value used to ensure that no referenceName or referenceId is listed twice with a different
   // referenceId or referenceName (respectively).  Notice the "toSet", which means it's okay to pass an Iterable
@@ -192,41 +192,16 @@ class SequenceDictionary(recordsIn: Iterable[SequenceRecord]) extends Serializab
     }.toSeq: _*)
   }
 
-  def records: Seq[SequenceRecord] = recordIndices.values.toSeq
+  def records: Set[SequenceRecord] = recordIndices.values.toSet
 
   def +(rec: SequenceRecord): SequenceDictionary =
-    new SequenceDictionary(recordsIn ++ List(rec))
-
-  def +=(rec: SequenceRecord): SequenceDictionary = {
-
-    recordIndices.put(rec.id, rec)
-    recordNames.put(rec.name, rec)
-    this
-  }
+    new SequenceDictionary(recordsIn ++ Set(rec))
 
   def ++(dict: SequenceDictionary): SequenceDictionary =
     new SequenceDictionary(recordsIn ++ dict.records)
 
-  def ++(recs: Seq[SequenceRecord]): SequenceDictionary =
+  def ++(recs: Set[SequenceRecord]): SequenceDictionary =
     recs.foldRight(this)((rec, dict) => dict + rec)
-
-  def ++=(recs: Seq[SequenceRecord]): SequenceDictionary = {
-    recs.foreach {
-      rec => this += rec
-    }
-    this
-  }
-
-  def ++=(dict: SequenceDictionary): SequenceDictionary = {
-    dict.recordIndices.keys.foreach {
-      idx => {
-        val newrec = dict.recordIndices(idx)
-        recordIndices.put(newrec.id, newrec)
-        recordNames.put(newrec.name, newrec)
-      }
-    }
-    this
-  }
 
   /**
    * Tests whether two dictionaries are compatible, where "compatible" means that
@@ -279,7 +254,7 @@ class SequenceDictionary(recordsIn: Iterable[SequenceRecord]) extends Serializab
 
 object SequenceDictionary {
 
-  def apply(recordsIn: SequenceRecord*) = new SequenceDictionary(recordsIn)
+  def apply(recordsIn: SequenceRecord*) = new SequenceDictionary(recordsIn.toSet)
 
   /**
    * Extracts a SAM sequence dictionary from a SAM file header and returns an
