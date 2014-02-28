@@ -206,7 +206,7 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends AdamSequenceDictionar
     }
 
     // get sequence dictionary
-    val seqDict = sortedRdd.sequenceDictionary()
+    val seqDict = sortedRdd.adamGetSequenceDictionary()
 
     val pp = new Reads2PileupProcessor(secondaryAlignments)
     
