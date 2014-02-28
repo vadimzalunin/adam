@@ -79,10 +79,13 @@ abstract class AdamSequenceDictionaryRDDAggregator[T](rdd: RDD[T]) extends Seria
    * @return A sequence dictionary describing the reference contigs in this dataset.
    */
   def adamGetSequenceDictionary (): SequenceDictionary =
-    rdd.flatMap(getSequenceRecordsFromElement(_))
-      .aggregate(SequenceDictionary())(
-      (dict: SequenceDictionary, rec: SequenceRecord) => dict + rec,
-      (dict1: SequenceDictionary, dict2: SequenceDictionary) => dict1 ++ dict2)
+    rdd.mapPartitions(iter => {
+      iter.fold(SequenceDictionary())((dict: SequenceDictionary, rec: T) => {
+        dict + getSequenceRecordsFromElement(rec)
+      })
+    }, true)
+    .reduce(_ ++ _)
+
 }
 
 
