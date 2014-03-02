@@ -410,7 +410,7 @@ object SequenceRecord {
    * @param rec The ADAMRecord from which to extract the SequenceRecord entries
    * @return a list of all SequenceRecord entries derivable from this record.
    */
-  def fromADAMRecord(rec: ADAMRecord): Seq[SequenceRecord] = {
+  def fromADAMRecord(rec: ADAMRecord): Set[SequenceRecord] = {
 
     assert(rec != null, "ADAMRecord was null")
 
@@ -421,29 +421,29 @@ object SequenceRecord {
 
         val left =
           if (rec.getReadMapped)
-            List(SequenceRecord(rec.getReferenceId, rec.getReferenceName, rec.getReferenceLength, rec.getReferenceUrl))
+            Set(SequenceRecord(rec.getReferenceId, rec.getReferenceName, rec.getReferenceLength, rec.getReferenceUrl))
           else
-            List()
+            Set()
 
         val right =
           if (rec.getMateMapped)
-            List(SequenceRecord(rec.getMateReferenceId, rec.getMateReference, rec.getMateReferenceLength, rec.getMateReferenceUrl))
+            Set(SequenceRecord(rec.getMateReferenceId, rec.getMateReference, rec.getMateReferenceLength, rec.getMateReferenceUrl))
           else
-            List()
+            Set()
 
         left ++ right
 
       } else {
-        List()
+        Set()
       }
 
     } else {
 
       if (rec.getReadMapped) {
-        List(SequenceRecord(rec.getReferenceId, rec.getReferenceName, rec.getReferenceLength, rec.getReferenceUrl))
+        Set(SequenceRecord(rec.getReferenceId, rec.getReferenceName, rec.getReferenceLength, rec.getReferenceUrl))
       } else {
         // If the read isn't mapped, then ignore the fields altogether.
-        List()
+        Set()
       }
     }
   }
