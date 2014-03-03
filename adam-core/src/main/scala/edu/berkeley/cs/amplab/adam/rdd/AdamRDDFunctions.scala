@@ -70,7 +70,7 @@ abstract class AdamSequenceDictionaryRDDAggregator[T](rdd: RDD[T]) extends Seria
    * @param elem Element from which to extract sequence records.
    * @return A seq of sequence records.
    */
-  def getSequenceRecordsFromElement (elem: T): Seq[SequenceRecord]
+  def getSequenceRecordsFromElement (elem: T): scala.collection.Set[SequenceRecord]
 
   /**
    * Aggregates together a sequence dictionary from the different individual reference sequences
@@ -78,16 +78,20 @@ abstract class AdamSequenceDictionaryRDDAggregator[T](rdd: RDD[T]) extends Seria
    *
    * @return A sequence dictionary describing the reference contigs in this dataset.
    */
-  def adamGetSequenceDictionary (): SequenceDictionary =
-    rdd.mapPartitions(iter => {
-      iter.fold(SequenceDictionary())((dict: SequenceDictionary, rec: T) => {
-        dict + getSequenceRecordsFromElement(rec)
-      })
-    }, true)
-    .reduce(_ ++ _)
+  def adamGetSequenceDictionary (): SequenceDictionary = {
+    def mergeRecords(dict: SequenceDictionary, rec: T): SequenceDictionary = {
+      dict ++ getSequenceRecordsFromElement(rec)
+    }
+
+    def foldIterator(iter: Iterator[T]): SequenceDictionary = {
+      iter.foldLeft(SequenceDictionary())(mergeRecords)
+    }
+    
+    rdd.mapPartitions(iter => Iterator(foldIterator(iter)), true)
+      .reduce(_ ++ _)
+  }
 
 }
-
 
 /**
  * A class that provides functions to recover a sequence dictionary from a generic RDD of records
@@ -103,14 +107,14 @@ abstract class AdamSequenceDictionaryRDDAggregator[T](rdd: RDD[T]) extends Seria
 class AdamSpecificRecordSequenceDictionaryRDDAggregator[T <% SpecificRecord : Manifest](rdd: RDD[T])
   extends AdamSequenceDictionaryRDDAggregator[T](rdd) {
 
-  def getSequenceRecordsFromElement (elem: T): Seq[SequenceRecord] = {
-    Seq(SequenceRecord.fromSpecificRecord(elem))
+  def getSequenceRecordsFromElement (elem: T): Set[SequenceRecord] = {
+    Set(SequenceRecord.fromSpecificRecord(elem))
   }
 }
 
 class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends AdamSequenceDictionaryRDDAggregator[ADAMRecord](rdd) {
 
-  def getSequenceRecordsFromElement (elem: ADAMRecord): Seq[SequenceRecord] = {
+  def getSequenceRecordsFromElement (elem: ADAMRecord): scala.collection.Set[SequenceRecord] = {
     SequenceRecord.fromADAMRecord(elem)
   }
 
@@ -348,9 +352,9 @@ class AdamRodRDDFunctions(rdd: RDD[ADAMRod]) extends Serializable with Logging {
 
 class AdamVariantContextRDDFunctions(rdd: RDD[ADAMVariantContext]) extends AdamSequenceDictionaryRDDAggregator[ADAMVariantContext](rdd) {
 
-  def getSequenceRecordsFromElement (elem: ADAMVariantContext): Seq[SequenceRecord] = {
+  def getSequenceRecordsFromElement (elem: ADAMVariantContext): Set[SequenceRecord] = {
     // variant context contains a single locus
-    Seq(SequenceRecord.fromSpecificRecord(elem.variants.head))
+    Set(SequenceRecord.fromSpecificRecord(elem.variants.head))
   }
 
   /**
@@ -500,9 +504,9 @@ class AdamNucleotideContigRDDFunctions(rdd: RDD[ADAMNucleotideContig]) extends A
     rdd.flatMap(c => remapContig(c, bcastDict.value))
   }
 
-  def getSequenceRecordsFromElement (elem: ADAMNucleotideContig): Seq[SequenceRecord] = {
+  def getSequenceRecordsFromElement (elem: ADAMNucleotideContig): Set[SequenceRecord] = {
     // variant context contains a single locus
-    Seq(SequenceRecord.fromADAMContig(elem))
+    Set(SequenceRecord.fromADAMContig(elem))
   }
 
 }
