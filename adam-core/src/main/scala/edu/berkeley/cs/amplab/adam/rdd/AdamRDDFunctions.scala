@@ -79,12 +79,21 @@ abstract class AdamSequenceDictionaryRDDAggregator[T](rdd: RDD[T]) extends Seria
    * @return A sequence dictionary describing the reference contigs in this dataset.
    */
   def adamGetSequenceDictionary (): SequenceDictionary = {
-    def mergeRecords(dict: SequenceDictionary, rec: T): SequenceDictionary = {
-      dict ++ getSequenceRecordsFromElement(rec)
+    def mergeRecords(l: List[SequenceRecord], rec: T): List[SequenceRecord] = {
+      val recs = getSequenceRecordsFromElement(rec)
+      
+      recs.foldLeft(l)((li: List[SequenceRecord], r: SequenceRecord) => {
+        if (!li.contains(r)) {
+          r :: li
+        } else {
+          li
+        }
+      })
     }
 
     def foldIterator(iter: Iterator[T]): SequenceDictionary = {
-      iter.foldLeft(SequenceDictionary())(mergeRecords)
+      val recs = iter.foldLeft(List[SequenceRecord]())(mergeRecords)
+      new SequenceDictionary(recs.toArray)
     }
     
     rdd.mapPartitions(iter => Iterator(foldIterator(iter)), true)
