@@ -215,9 +215,9 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends AdamSequenceDictionar
     
     // sort data if it isn't already sorted
     val sortedRdd = if (dataIsSorted) {
-      rdd.cache
+      rdd
     } else {
-      rdd.adamSortReadsByReferencePosition().cache
+      rdd.adamSortReadsByReferencePosition()
     }
 
     // get sequence dictionary
