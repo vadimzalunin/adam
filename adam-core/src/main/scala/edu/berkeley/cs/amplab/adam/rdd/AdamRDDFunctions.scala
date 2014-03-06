@@ -208,10 +208,15 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends AdamSequenceDictionar
    * into a rod.
    *
    * @param secondaryAlignments Creates rods for non-primary aligned reads. Default is false.
+   * @param dataIsSorted If the input dataset is sorted, set dataIsSorted to true to avoid a sorting phase.
+   * @param dictionary Optional sequence dictionary; if provided, sequence dictionary aggregation is skipped.
+   * @param partitioningFactor Factor by which to increase the number of partitions containing pileups. Default value is 10.
    * @return RDD of ADAMRods.
    */
   def adamRecords2Rods (secondaryAlignments: Boolean = false,
-                        dataIsSorted: Boolean = false): RDD[ADAMRod] = {
+                        dataIsSorted: Boolean = false,
+                        dictionary: Option[SequenceDictionary] = None,
+                        partitioningFactor: Int = 10): RDD[ADAMRod] = {
     
     // sort data if it isn't already sorted
     val sortedRdd = if (dataIsSorted) {
@@ -221,7 +226,11 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends AdamSequenceDictionar
     }
 
     // get sequence dictionary
-    val seqDict = sortedRdd.adamGetSequenceDictionary()
+    val seqDict = if (dictionary.isDefined) {
+      dictionary.get
+    } else {
+      sortedRdd.adamGetSequenceDictionary()
+    }
 
     val pp = new Reads2PileupProcessor(secondaryAlignments)
     
