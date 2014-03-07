@@ -218,34 +218,42 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends AdamSequenceDictionar
                         dictionary: Option[SequenceDictionary] = None,
                         partitioningFactor: Int = 10): RDD[ADAMRod] = {
     
-    // sort data if it isn't already sorted
-    val sortedRdd = if (dataIsSorted) {
-      rdd
-    } else {
-      rdd.adamSortReadsByReferencePosition()
-    }
-
     // get sequence dictionary
     val seqDict = if (dictionary.isDefined) {
       dictionary.get
     } else {
-      sortedRdd.adamGetSequenceDictionary()
+      rdd.adamGetSequenceDictionary()
+    }
+
+    // sort data if it isn't already sorted
+    val sortedRdd = if (dataIsSorted) {
+      rdd
+    } else {
+      rdd.keyBy(ReferenceRegion(_).get)
+        .sortByKey()
+        .map(kv => kv._2)
+//      .partitionBy(new GenomicRegionPartitioner(rdd.partitions.length, seqDict))
     }
 
     val pp = new Reads2PileupProcessor(secondaryAlignments)
     
     // convert all partitions into pileups - preserves partitioning
     val rddOfPileups = sortedRdd.mapPartitions(it => {
-      it.toList
-        .flatMap(pp.readToPileups)
-        .groupBy(v => ReferencePosition(v))
-        .toIterator
+      it.flatMap(pp.readToPileups(_).map(v => (ReferencePosition(v), v)))
     }, true)
+      .sortByKey()
+//.partitionBy(new GenomicRegionPartitioner(rdd.partitions.length, seqDict))
 
     // group bases together and create rods
-    rddOfPileups.groupByKey(new GenomicRegionPartitioner(rddOfPileups.partitions.length,
-                                                         seqDict))
-      .map(kv => new ADAMRod(kv._1, kv._2.flatMap(l => l)))
+    rddOfPileups.mapPartitions(iter => {
+      iter.toList.groupBy(kv => kv._1)
+        .map(kv => {
+          val (loc, pileups) = kv
+          
+          new ADAMRod(loc, pileups.map(kv => kv._2))
+        })
+      .toIterator
+    }, true)
   }
 
   /**

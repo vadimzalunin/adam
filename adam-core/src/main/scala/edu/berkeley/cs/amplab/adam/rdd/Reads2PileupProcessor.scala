@@ -17,10 +17,11 @@
 package edu.berkeley.cs.amplab.adam.rdd
 
 import edu.berkeley.cs.amplab.adam.avro.{Base, ADAMPileup, ADAMRecord}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.Logging
 import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord._
+import edu.berkeley.cs.amplab.adam.rich.RichCigar._
 import edu.berkeley.cs.amplab.adam.util._
+import org.apache.spark.Logging
+import org.apache.spark.rdd.RDD
 import net.sf.samtools.{CigarOperator, TextCigarCodec}
 import scala.collection.JavaConverters._
 import scala.collection.immutable.StringOps
@@ -44,7 +45,7 @@ private[rdd] class Reads2PileupProcessor (createSecondaryAlignments: Boolean = f
    * @param record Read to convert.
    * @return A list of pileups.
    */
-  def readToPileups(record: ADAMRecord): List[ADAMPileup] = {
+  def readToPileups(record: ADAMRecord): Array[ADAMPileup] = {
     if (record == null || 
         record.getCigar == null || 
         record.getMismatchingPositions == null ||
@@ -53,11 +54,11 @@ private[rdd] class Reads2PileupProcessor (createSecondaryAlignments: Boolean = f
         record.getPrimaryAlignment == null) {
       // TODO: log this later... We can't create a pileup without the CIGAR and MD tag
       // in the future, we can also get reference information from a reference file
-      return List.empty
+      return Array.empty
     }
 
     if (!(createSecondaryAlignments || record.getPrimaryAlignment)) {
-      return List.empty
+      return Array.empty
     }
 
     def baseFromSequence(pos: Int): Base = {
@@ -89,7 +90,15 @@ private[rdd] class Reads2PileupProcessor (createSecondaryAlignments: Boolean = f
         .setReferenceId(record.getReferenceId)
         .setMapQuality(record.getMapq)
         .setPosition(referencePos)
-        .setRecordGroupSequencingCenter(record.getRecordGroupSequencingCenter)
+        .setSangerQuality(record.qualityScores(readPos).toInt)
+        .setNumReverseStrand(reverseStrandCount)
+        .setNumSoftClipped(0)
+        .setReadStart(record.getStart)
+        .setReadEnd(end)
+        .setCountAtPosition(1)
+
+      /*
+       *         .setRecordGroupSequencingCenter(record.getRecordGroupSequencingCenter)
         .setRecordGroupDescription(record.getRecordGroupDescription)
         .setRecordGroupRunDateEpoch(record.getRecordGroupRunDateEpoch)
         .setRecordGroupFlowOrder(record.getRecordGroupFlowOrder)
@@ -99,24 +108,20 @@ private[rdd] class Reads2PileupProcessor (createSecondaryAlignments: Boolean = f
         .setRecordGroupPlatform(record.getRecordGroupPlatform)
         .setRecordGroupPlatformUnit(record.getRecordGroupPlatformUnit)
         .setRecordGroupSample(record.getRecordGroupSample)
-        .setSangerQuality(record.qualityScores(readPos).toInt)
-        .setNumReverseStrand(reverseStrandCount)
-        .setNumSoftClipped(0)
         .setReadName(record.getReadName)
-        .setReadStart(record.getStart)
-        .setReadEnd(end)
-        .setCountAtPosition(1)
 
+*/
     }
 
     var referencePos = record.getStart
     val isReverseStrand = record.getReadNegativeStrand
     var readPos = 0
+    var baseCount = 0
 
     val cigar = Reads2PileupProcessor.CIGAR_CODEC.decode(record.getCigar.toString)
     val mdTag = MdTag(record.getMismatchingPositions.toString, referencePos)
 
-    var pileupList = List[ADAMPileup]()
+    var pileupArray = new Array[ADAMPileup](cigar.getLength)
 
     cigar.getCigarElements.asScala.foreach(cigarElement =>
       cigarElement.getOperator match {
@@ -134,10 +139,11 @@ private[rdd] class Reads2PileupProcessor (createSecondaryAlignments: Boolean = f
               .setRangeLength(cigarElement.getLength)
               .setReferenceBase(null)
               .build()
-            pileupList ::= pileup
+            pileupArray(baseCount) = pileup
             // Consumes the read bases but NOT the reference bases
             readPos += 1
             insertPos += 1
+            baseCount += 1
           }
         // MATCH (sequence match or mismatch)
         case CigarOperator.M =>
@@ -158,10 +164,11 @@ private[rdd] class Reads2PileupProcessor (createSecondaryAlignments: Boolean = f
               .setReadBase(baseFromSequence(readPos))
               .setReferenceBase(referenceBase)
               .build()
-            pileupList ::= pileup
+            pileupArray(baseCount) = pileup
 
             readPos += 1
             referencePos += 1
+            baseCount += 1
           }
 
         // DELETE
@@ -177,9 +184,10 @@ private[rdd] class Reads2PileupProcessor (createSecondaryAlignments: Boolean = f
               .setRangeLength(cigarElement.getLength)
               .build()
 
-            pileupList ::= pileup
+            pileupArray(baseCount) = pileup
             // Consume reference bases but not read bases
             referencePos += 1
+            baseCount += 1
           }
 
         // Soft clip
@@ -198,10 +206,11 @@ private[rdd] class Reads2PileupProcessor (createSecondaryAlignments: Boolean = f
               .setRangeLength(cigarElement.getLength)
               .setReferenceBase(null)
               .build()
-            pileupList ::= pileup
+            pileupArray(baseCount) = pileup
 
             readPos += 1
             clipPos += 1
+            baseCount += 1
           }
 
         // All other cases (TODO: add X and EQ?)
@@ -215,7 +224,7 @@ private[rdd] class Reads2PileupProcessor (createSecondaryAlignments: Boolean = f
       }
     )
 
-    pileupList
+    pileupArray.filter(p => p != null && p.getPosition != null)
   }
 
   /**
