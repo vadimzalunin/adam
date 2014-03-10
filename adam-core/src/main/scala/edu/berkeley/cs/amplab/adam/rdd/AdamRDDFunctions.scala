@@ -25,7 +25,7 @@ import edu.berkeley.cs.amplab.adam.avro.{ADAMPileup, ADAMRecord, ADAMVariant, AD
 import edu.berkeley.cs.amplab.adam.models._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, Partitioner}
 import edu.berkeley.cs.amplab.adam.projections.{ADAMVariantAnnotations, ADAMVariantField}
 import edu.berkeley.cs.amplab.adam.rdd.AdamContext._
 import edu.berkeley.cs.amplab.adam.converters.GenotypesToVariantsConverter
@@ -214,10 +214,12 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends AdamSequenceDictionar
    * @return RDD of ADAMRods.
    */
   def adamRecords2Rods (secondaryAlignments: Boolean = false,
-                        dataIsSorted: Boolean = false,
+                        dataIsSorted: Option[Partitioner] = None,
                         dictionary: Option[SequenceDictionary] = None,
                         partitioningFactor: Int = 10): RDD[ADAMRod] = {
     
+    var p = dataIsSorted
+
     // get sequence dictionary
     val seqDict = if (dictionary.isDefined) {
       dictionary.get
@@ -226,23 +228,46 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends AdamSequenceDictionar
     }
 
     // sort data if it isn't already sorted
-    val sortedRdd = if (dataIsSorted) {
+    val sortedRdd = if (dataIsSorted.isDefined) {
       rdd
     } else {
-      rdd.keyBy(ReferenceRegion(_).get)
+      val sr = rdd.keyBy(ReferenceRegion(_).get)
         .sortByKey()
-        .map(kv => kv._2)
+      
+      p = sr.partitioner
+      
+      sr.map(kv => kv._2)
 //      .partitionBy(new GenomicRegionPartitioner(rdd.partitions.length, seqDict))
     }
 
     val pp = new Reads2PileupProcessor(secondaryAlignments)
     
     // convert all partitions into pileups - preserves partitioning
-    val rddOfPileups = sortedRdd.mapPartitions(it => {
+    val rddOfPileups0 = sortedRdd.mapPartitions(it => {
       it.flatMap(pp.readToPileups(_).map(v => (ReferencePosition(v), v)))
-    }, true)
-      .sortByKey()
-//.partitionBy(new GenomicRegionPartitioner(rdd.partitions.length, seqDict))
+    })
+
+    val countPerPartition: List[(Int, (Int, Int))] = rddOfPileups0.mapPartitionsWithIndex((i: Int, iter:Iterator[(ReferencePosition, ADAMPileup)]) => {
+      val toMove = iter.map(kv => {
+        val m = if (p.get.getPartition(kv._1) != i) {
+          1
+        } else {
+          0
+        }
+
+        (m, 1)
+      }).reduce((a: (Int, Int), b: (Int, Int)) => {
+        (a._1 + b._1, a._2 + b._2)
+      })
+          
+      Iterator((i, toMove))
+    }).map(List(_)).reduce(_ ::: _)
+
+    countPerPartition.foreach(v => {
+      println("For partition: " + v._1 + " had " + v._2._1 + " and shuffled " + v._2._2)
+    })
+
+    val rddOfPileups = rddOfPileups0.partitionBy(p.get) //new GenomicRegionPartitioner(rdd.partitions.length, seqDict))
 
     // group bases together and create rods
     rddOfPileups.mapPartitions(iter => {

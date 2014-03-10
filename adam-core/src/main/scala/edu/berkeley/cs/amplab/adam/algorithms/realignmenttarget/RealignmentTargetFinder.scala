@@ -19,7 +19,7 @@ package edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget
 import edu.berkeley.cs.amplab.adam.avro.{ADAMRecord,ADAMPileup}
 import edu.berkeley.cs.amplab.adam.models.ADAMRod
 import edu.berkeley.cs.amplab.adam.rdd.AdamContext._
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import scala.annotation.tailrec
@@ -33,8 +33,8 @@ object RealignmentTargetFinder {
    * @param rdd RDD of reads to use in generating realignment targets.
    * @return Sorted set of realignment targets.
    */
-  def apply(rdd: RDD[ADAMRecord]): TreeSet[IndelRealignmentTarget] = {
-    new RealignmentTargetFinder().findTargets(rdd).set
+  def apply(rdd: RDD[ADAMRecord], p: Option[Partitioner] = None): TreeSet[IndelRealignmentTarget] = {
+    new RealignmentTargetFinder().findTargets(rdd, p).set
   }
 }
 
@@ -90,10 +90,10 @@ class RealignmentTargetFinder extends Serializable with Logging {
    * @param reads An RDD containing reads to generate indel realignment targets from.
    * @return An ordered set of indel realignment targets.
    */
-  def findTargets (reads: RDD[ADAMRecord]): TargetSet = {
+  def findTargets (reads: RDD[ADAMRecord], p: Option[Partitioner]): TargetSet = {
 
     // generate pileups from reads
-    val rods: RDD[ADAMRod] = reads.adamRecords2Rods(true, true)
+    val rods: RDD[ADAMRod] = reads.adamRecords2Rods(true, p)
 
     def createTargetSet(target: IndelRealignmentTarget) : TargetSet = {
       val tmp = new TreeSet()(TargetOrdering)

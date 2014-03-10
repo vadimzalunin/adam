@@ -33,7 +33,7 @@ import edu.berkeley.cs.amplab.adam.util.ImplicitJavaConversions
 import edu.berkeley.cs.amplab.adam.util.ImplicitJavaConversions._
 import edu.berkeley.cs.amplab.adam.util.NormalizationUtils._
 import net.sf.samtools.{Cigar, CigarOperator, CigarElement}
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.SparkContext._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -478,13 +478,17 @@ private[rdd] class RealignIndels (val dataIsSorted: Boolean,
    * @return Realigned read.
    */
   def realignIndels (rdd: RDD[ADAMRecord]): RDD[ADAMRecord] = {
+    var p: Option[Partitioner] = None
     val sortedRdd = if (dataIsSorted) {
       rdd.filter(r => r.getReadMapped)
     } else {
-      rdd.filter(r => r.getReadMapped)
-        .keyBy(r => ReferencePosition(r))
+      val sr = rdd.filter(r => r.getReadMapped)
+        .keyBy(r => ReferencePosition(r).get)
         .sortByKey()
-        .map(kv => kv._2)
+      
+      p = sr.partitioner
+      
+      sr.map(kv => kv._2)
     }
 
     // we only want to convert once so let's get it over with
@@ -492,7 +496,7 @@ private[rdd] class RealignIndels (val dataIsSorted: Boolean,
 
     // find realignment targets
     log.info("Generating realignment targets...")
-    val targets: TreeSet[IndelRealignmentTarget] = RealignmentTargetFinder(rdd)
+    val targets: TreeSet[IndelRealignmentTarget] = RealignmentTargetFinder(sortedRdd, p)
 
     // map reads to targets
     log.info("Grouping reads by target...")
