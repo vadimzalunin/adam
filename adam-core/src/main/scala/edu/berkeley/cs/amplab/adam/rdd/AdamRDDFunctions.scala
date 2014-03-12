@@ -26,7 +26,8 @@ import edu.berkeley.cs.amplab.adam.models.{SequenceRecord,
                                            SnpTable, 
                                            ReferencePosition, 
                                            ReferenceRegion,
-                                           ADAMRod}
+                                           ADAMRod,
+                                           PileupOverhang}
 import edu.berkeley.cs.amplab.adam.rdd.AdamContext._
 import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord._
 import edu.berkeley.cs.amplab.adam.rich.RichADAMRecord
@@ -35,7 +36,7 @@ import java.io.File
 import java.util.logging.Level
 import org.apache.avro.specific.SpecificRecord
 import org.apache.hadoop.mapreduce.Job
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import parquet.avro.{AvroParquetOutputFormat, AvroWriteSupport}
@@ -43,6 +44,7 @@ import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.hadoop.util.ContextUtil
 import scala.math.{min, max}
+import scala.collection.mutable.MutableList
 
 class AdamRDDFunctions[T <% SpecificRecord : Manifest](rdd: RDD[T]) extends Serializable {
 
@@ -149,59 +151,79 @@ class AdamRecordRDDFunctions(rdd: RDD[ADAMRecord]) extends Serializable with Log
    * Groups all reads by reference position, with all reference position bases grouped
    * into a rod.
    *
-   * @param bucketSize Size in basepairs of buckets. Larger buckets take more time per
-   * bucket to convert, but have lower skew. Default is 1000.
    * @param secondaryAlignments Creates rods for non-primary aligned reads. Default is false.
+   * @param dataIsSorted If the input dataset is sorted, set dataIsSorted to true to avoid a sorting phase.
+   * @param dictionary Optional sequence dictionary; if provided, sequence dictionary aggregation is skipped.
+   * @param partitioningFactor Factor by which to increase the number of partitions containing pileups. Default value is 10.
    * @return RDD of ADAMRods.
    */
-  def adamRecords2Rods (bucketSize: Int = 1000,
-                        secondaryAlignments: Boolean = false): RDD[ADAMRod] = {
+  def adamRecords2Rods (secondaryAlignments: Boolean = false,
+                        dataIsSorted: Option[Partitioner] = None,
+                        partitioningFactor: Int = 10): RDD[ADAMRod] = {
     
-    /**
-     * Maps a read to one or two buckets. A read maps to a single bucket if both
-     * it's start and end are in a single bucket.
-     *
-     * @param r Read to map.
-     * @return List containing one or two mapping key/value pairs.
-     */
-    def mapToBucket (r: ADAMRecord): List[(ReferencePosition, ADAMRecord)] = {
-      val s = r.getStart / bucketSize
-      val e = RichADAMRecord(r).end.get / bucketSize
-      val id = r.getReferenceId
+    var p = dataIsSorted
 
-      if (s == e) {
-        List((new ReferencePosition(id, s), r))
-      } else {
-        List((new ReferencePosition(id, s), r), (new ReferencePosition(id, e), r))
-      }
+    // sort data if it isn't already sorted
+    val sortedRdd = if (dataIsSorted.isDefined) {
+      rdd
+    } else {
+      val sr = rdd.keyBy(ReferencePosition(_).get)
+        .sortByKey()
+      
+      p = sr.partitioner
+      
+      sr.map(kv => kv._2)
     }
 
-    println("Putting reads in buckets.")
-
-    val bucketedReads = rdd.filter(_.getStart != null)
-      .flatMap(mapToBucket)
-      .groupByKey()
-
-    println ("Have reads in buckets.")
-
+    val pileupsToMove = rdd.context.accumulableCollection(MutableList[PileupOverhang]())
+    val maxIdx = p.get.numPartitions
     val pp = new Reads2PileupProcessor(secondaryAlignments)
     
-    /**
-     * Converts all reads in a bucket into rods.
-     *
-     * @param bucket Tuple of (bucket number, reads in bucket).
-     * @return A sequence containing the rods in this bucket.
-     */
-    def bucketedReadsToRods (bucket: (ReferencePosition, Seq[ADAMRecord])): Seq[ADAMRod] = {
-      val (bucketStart, bucketReads) = bucket
+    // convert all partitions into pileups - preserves partitioning
+    val rddOfPileups = sortedRdd.mapPartitionsWithIndex((idx: Int, it: Iterator[ADAMRecord]) => {
+      val (reads, toPrint) = it.duplicate
+      val pileups = reads.flatMap(pp.readToPileups(_)
+        .map(v => (ReferencePosition(v), v)))
 
-      bucketReads.flatMap(pp.readToPileups)
-        .groupBy(ReferencePosition(_))
-        .toList
-        .map(g => ADAMRod(g._1, g._2.toList)).toSeq
-    }
+      if (idx == maxIdx) {
+        pileups
+      } else {
+        val (toKeep, toMove) = pileups.duplicate
 
-    bucketedReads.flatMap(bucketedReadsToRods)
+        val (toMove1, toMovePrint) = toMove.filter(kv => p.get.getPartition(kv._1) != idx).duplicate
+        //toMovePrint.foreach(l => println("Moving:" + l.toString))
+        pileupsToMove += PileupOverhang(idx, toMove1)
+        
+        val (toKeep1, toKeepPrint) = toKeep.filter(kv => p.get.getPartition(kv._1) == idx).duplicate
+        //toKeepPrint.foreach(l => println("Keeping:" + l.toString))
+        
+        toKeep1
+      }
+    })
+
+    // get accumulated map - need to do count to force side effects
+    rddOfPileups.cache
+    rddOfPileups.count()
+    val pMap: List[PileupOverhang] = pileupsToMove.value.toList
+    val bcastMap = rdd.context.broadcast(pMap)
+    
+    // group bases together and create rods
+    rddOfPileups.mapPartitionsWithIndex((idx: Int, iter: Iterator[(ReferencePosition, ADAMPileup)]) => {
+      val toJoin = bcastMap.value.find(_.partition == idx - 1)
+      val joinIter = if (toJoin.isDefined) {
+        iter ++ toJoin.get.getPileups.toIterator
+      } else {
+        iter
+      }
+
+      joinIter.toList.groupBy(kv => kv._1)
+        .map(kv => {
+          val (loc, pileups) = kv
+          
+          new ADAMRod(loc, pileups.map(kv => kv._2))
+        })
+      .toIterator
+    }, true)
   }
 
   /**

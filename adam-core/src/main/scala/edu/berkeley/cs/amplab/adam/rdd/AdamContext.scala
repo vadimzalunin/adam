@@ -48,7 +48,6 @@ import scala.Some
 import scala.collection.JavaConversions._
 import scala.collection.Map
 
-
 object AdamContext {
   // Add ADAM Spark context methods
   implicit def sparkContextToAdamContext(sc: SparkContext): AdamContext = new AdamContext(sc)

@@ -15,19 +15,20 @@
  */
 package edu.berkeley.cs.amplab.adam.serialization
 
-import org.apache.avro.specific.{SpecificDatumWriter, SpecificDatumReader, SpecificRecord}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
-import org.apache.avro.io.{BinaryDecoder, DecoderFactory, BinaryEncoder, EncoderFactory}
+import edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget._
 import edu.berkeley.cs.amplab.adam.avro.{ADAMGenotype, 
                                          ADAMPileup, 
                                          ADAMRecord, 
                                          ADAMNucleotideContigFragment}
 import edu.berkeley.cs.amplab.adam.models._
 import it.unimi.dsi.fastutil.io.{FastByteArrayInputStream, FastByteArrayOutputStream}
+import org.apache.avro.io.{BinaryDecoder, DecoderFactory, BinaryEncoder, EncoderFactory}
+import org.apache.avro.specific.{SpecificDatumWriter, SpecificDatumReader, SpecificRecord}
 import org.apache.spark.serializer.KryoRegistrator
-import edu.berkeley.cs.amplab.adam.algorithms.realignmenttarget._
 import scala.collection.immutable.{TreeSet, NumericRange}
+import scala.collection.mutable.MutableList
 
 case class InputStreamWithDecoder(size: Int) {
   val buffer = new Array[Byte](size)

@@ -269,8 +269,20 @@ class AdamRDDFunctionsSuite extends SparkFunSuite {
       .setPrimaryAlignment(true)
       .setQual("%")
       .build()
+    val r3 = ADAMRecord.newBuilder
+      .setStart(3L)
+      .setReferenceId(0)
+      .setSequence("G")
+      .setMapq(50)
+      .setCigar("1M")
+      .setMismatchingPositions("1")
+      .setReadNegativeStrand(false)
+      .setReadMapped(true)
+      .setPrimaryAlignment(true)
+      .setQual("%")
+      .build()
     
-    val reads = sc.parallelize(List(r0, r1, r2))
+    val reads = sc.parallelize(List(r0, r1, r2, r3), 2)
 
     val rods = reads.adamRecords2Rods()
     
@@ -283,7 +295,7 @@ class AdamRDDFunctionsSuite extends SparkFunSuite {
     assert(rods.filter(_.position.pos == 2L).first.pileups.length === 2)
     assert(rods.filter(_.position.pos == 2L).first.pileups.forall(_.getReadBase == Base.C))
     assert(rods.filter(_.position.pos == 3L).count === 1)
-    assert(rods.filter(_.position.pos == 3L).first.pileups.length === 3)
+    assert(rods.filter(_.position.pos == 3L).first.pileups.length === 4)
     assert(rods.filter(_.position.pos == 3L).first.pileups.forall(_.getReadBase == Base.G))
   }
 
