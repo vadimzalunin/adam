@@ -17,7 +17,7 @@
  */
 package org.bdgenomics.adam.rdd.recalibration
 
-import org.bdgenomics.formats.avro.ADAMRecord
+import org.bdgenomics.formats.avro.AlignmentRecord
 import org.bdgenomics.adam.models.SnpTable
 import org.bdgenomics.adam.rich.DecadentRead
 import org.bdgenomics.adam.rich.DecadentRead._
@@ -72,8 +72,8 @@ class BaseQualityRecalibration(
   }
 
   if (enableVisitLogging) {
-    input.cache
-    dataset.cache
+    input.cache()
+    dataset.cache()
     dumpVisits("bqsr-visits.dump")
   }
 
@@ -87,7 +87,7 @@ class BaseQualityRecalibration(
     println(observed.toCSV)
   }
 
-  val result: RDD[ADAMRecord] = {
+  val result: RDD[AlignmentRecord] = {
     val recalibrator = Recalibrator(observed, minAcceptableQuality)
     input.map(recalibrator)
   }
@@ -100,7 +100,7 @@ class BaseQualityRecalibration(
         (if (read.record.getSecondOfPair) "2" else "")
 
     val readLengths =
-      input.map(read => (readId(read), read.residues.length)).collectAsMap
+      input.map(read => (readId(read), read.residues.length)).collectAsMap()
 
     val visited = dataset.
       map { case (key, residue) => (readId(residue.read), Seq(residue.offset)) }.
@@ -115,11 +115,11 @@ class BaseQualityRecalibration(
         visited.foreach { idx => buf(idx) = 'X' }
         writer.println(readName + "\t" + String.valueOf(buf))
     }
-    writer.close
+    writer.close()
   }
 }
 
 object BaseQualityRecalibration {
-  def apply(rdd: RDD[ADAMRecord], knownSnps: Broadcast[SnpTable]): RDD[ADAMRecord] =
+  def apply(rdd: RDD[AlignmentRecord], knownSnps: Broadcast[SnpTable]): RDD[AlignmentRecord] =
     new BaseQualityRecalibration(cloy(rdd), knownSnps).result
 }
