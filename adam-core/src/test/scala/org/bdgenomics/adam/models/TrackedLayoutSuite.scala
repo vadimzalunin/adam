@@ -63,4 +63,27 @@ class TrackedLayoutSuite extends FunSuite {
     assert(layout.numTracks === 2)
   }
 
+  test("OrderedTrackedLayout can handle unaligned reads") {
+    val (r1, r2, r3, r4) = (
+      rec("chr1", 100, "100M"),
+      rec("chr1", 150, "100M"),
+      rec("chr1", 200, "100M"),
+      ADAMRecord.newBuilder()
+      .setReadMapped(false)
+      .build())
+
+    val recs = Seq(r1, r2, r3, r4)
+    val layout: OrderedTrackedLayout[ADAMRecord] = new OrderedTrackedLayout(recs)
+
+    // Just making sure... r4 shouldn't overlap r1-3
+    val rm: ReferenceMapping[ADAMRecord] = ADAMRecordReferenceMapping
+    val refs123 = Seq(r1, r2, r3).map(rm.getReferenceRegion)
+
+    // Now, test the correct track assignments of each record
+    assert(layout.trackAssignments.get(r1) === Some(0))
+    assert(layout.trackAssignments.get(r2) === Some(1))
+    assert(layout.trackAssignments.get(r3) === Some(0))
+    assert(layout.trackAssignments.get(r4) === None)
+    assert(layout.numTracks === 2)
+  }
 }
