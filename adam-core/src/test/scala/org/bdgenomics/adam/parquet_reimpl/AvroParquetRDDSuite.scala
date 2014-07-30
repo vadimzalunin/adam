@@ -194,7 +194,7 @@ class AvroParquetRDDSuite extends SparkFunSuite {
   lazy val parquetLocation = System.getenv("PARQUET_LOCATION")
 
   sparkTest("Retrieve records from a Parquet file through HTTP", silenceSpark = true, NetworkConnected) {
-    val locator = new HTTPFileLocator(URI.create("http://www.cs.berkeley.edu/~massie/adams/part1"))
+    val locator = new HTTPFileLocator(URI.create("http://www.cs.berkeley.edu/~massie/adams/part1"), 1)
     val rdd = new AvroParquetRDD[ADAMRecord](
       sc,
       null,
@@ -232,7 +232,7 @@ class AvroParquetRDDSuite extends SparkFunSuite {
 
     val schema = Projection(readName, start, contig)
 
-    val locator = new HTTPFileLocator(URI.create("http://www.cs.berkeley.edu/~massie/adams/part1"))
+    val locator = new HTTPFileLocator(URI.create("http://www.cs.berkeley.edu/~massie/adams/part1"), 1)
     val rdd = new AvroParquetRDD[ADAMRecord](
       sc,
       null,
@@ -275,7 +275,7 @@ class AvroParquetRDDSuite extends SparkFunSuite {
     val schema = Projection(readName, start, sequence)
     val filter = new ReadNameFilter("simread:1:189606653:true")
 
-    val locator = new HTTPFileLocator(URI.create("http://www.cs.berkeley.edu/~massie/adams/part1"))
+    val locator = new HTTPFileLocator(URI.create("http://www.cs.berkeley.edu/~massie/adams/part1"), 1)
     val rdd = new AvroParquetRDD[ADAMRecord](
       sc,
       filter,

@@ -19,24 +19,40 @@ package org.bdgenomics.adam.io
 
 import java.io.InputStream
 import java.net.URI
+import org.apache.http.{ HttpResponse, Header }
 import org.apache.http.client.HttpClient
 import org.apache.http.client.methods.{ HttpGet, HttpHead }
 import org.apache.http.impl.client.DefaultHttpClient
 import org.apache.spark.Logging
+import scala.annotation.tailrec
 
 /**
  * HTTPRangedByteAccess supports Ranged GET queries against HTTP resources.
  *
  * @param uri The URL of the resource, which should support ranged queries
+ * @param retries Number of times to retry a failed connection before giving up
  */
-class HTTPRangedByteAccess(uri: URI) extends ByteAccess with Logging {
+class HTTPRangedByteAccess(uri: URI, retries: Int = 0) extends ByteAccess with Logging {
+
+  @tailrec
+  private def readHeaders(retries: Int): Array[Header] = {
+    try {
+      val httpClient: HttpClient = new DefaultHttpClient()
+      val head = new HttpHead(uri)
+      val response = httpClient.execute(head)
+      response.getAllHeaders
+    } catch {
+      case e: Exception =>
+        if (retries <= 0) throw e
+        else {
+          Thread.sleep((this.retries - retries + 1) * 1000)
+          readHeaders(retries - 1)
+        }
+    }
+  }
 
   private def readLength(): Long = {
-    val httpClient: HttpClient = new DefaultHttpClient()
-    val head = new HttpHead(uri)
-    val response = httpClient.execute(head)
-    val headers = response.getAllHeaders
-
+    val headers = readHeaders(retries)
     // The spec (http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.5) says that
     // Accept-Ranges can return values of 'bytes', 'none', or any other acceptable range-unit;
     // however, "bytes" is the only range-unit recognized in HTTP/1.1 and that clients may choose
@@ -78,22 +94,38 @@ class HTTPRangedByteAccess(uri: URI) extends ByteAccess with Logging {
 
   override def length(): Long = _length
 
+  @tailrec
+  private def getRange(start: Long, end: Long, retries: Int): HttpResponse = {
+    try {
+      val httpClient: HttpClient = new DefaultHttpClient()
+      val get = new HttpGet(uri)
+
+      // I believe the 'end' coordinate on the range request is _inclusive_
+      get.setHeader("Range", "bytes=%d-%d".format(start, end))
+
+      val response = httpClient.execute(get)
+
+      response
+    } catch {
+      case e: Exception =>
+        if (retries <= 0) throw e
+        else {
+          Thread.sleep((this.retries - retries + 1) * 1000)
+          getRange(start, end, retries - 1)
+        }
+    }
+  }
+
   /**
    * In this initial implementation, we throw an error when we get a partial response from the
    * server whose content is less than the bytes we originally requested.
    *
-   * @param offset The offset into the resource at which we want to start reading bytesd
+   * @param offset The offset into the resource at which we want to start reading bytes
    * @param length The number of bytes to be read
    * @return An InputStream from a ranged HTTP GET, which should contain just the requested bytes
    */
   override def readByteStream(offset: Long, length: Int): InputStream = {
-    val httpClient: HttpClient = new DefaultHttpClient()
-    val get = new HttpGet(uri)
-
-    // I believe the 'end' coordinate on the range request is _inclusive_
-    get.setHeader("Range", "bytes=%d-%d".format(offset, offset + length - 1))
-
-    val response = httpClient.execute(get)
+    val response = getRange(offset, offset + length - 1, retries)
 
     // We want a 206 response to a ranged request, not your normal 200!
     require(response.getStatusLine.getStatusCode == 206,
