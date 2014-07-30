@@ -45,12 +45,19 @@ class FlagStat(protected val args: FlagStatArgs) extends ADAMSparkCommand[FlagSt
   def run(sc: SparkContext, job: Job): Unit = {
 
     val projection = Projection(
-      AlignmentRecordField.readMapped, AlignmentRecordField.mateMapped, AlignmentRecordField.readPaired,
-      AlignmentRecordField.contig, AlignmentRecordField.mateContig,
+      AlignmentRecordField.readMapped,
+      AlignmentRecordField.mateMapped,
+      AlignmentRecordField.readPaired,
+      AlignmentRecordField.contig,
+      AlignmentRecordField.mateContig,
       AlignmentRecordField.primaryAlignment,
-      AlignmentRecordField.duplicateRead, AlignmentRecordField.readMapped, AlignmentRecordField.mateMapped,
-      AlignmentRecordField.firstOfPair, AlignmentRecordField.secondOfPair,
-      AlignmentRecordField.properPair, AlignmentRecordField.mapq,
+      AlignmentRecordField.duplicateRead,
+      AlignmentRecordField.readMapped,
+      AlignmentRecordField.mateMapped,
+      AlignmentRecordField.firstOfPair,
+      AlignmentRecordField.secondOfPair,
+      AlignmentRecordField.properPair,
+      AlignmentRecordField.mapq,
       AlignmentRecordField.failedVendorQualityChecks)
 
     val adamFile: RDD[AlignmentRecord] = sc.adamLoad(args.inputPath, projection = Some(projection))
