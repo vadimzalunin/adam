@@ -17,10 +17,10 @@
  */
 package org.bdgenomics.adam.plugins
 
-import org.bdgenomics.formats.avro.AlignmentRecord
 import org.apache.avro.Schema
-import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
+import org.bdgenomics.formats.avro.AlignmentRecord
 
 class TakeNPlugin extends ADAMPlugin[AlignmentRecord, AlignmentRecord] with Serializable {
   override def projection: Option[Schema] = None

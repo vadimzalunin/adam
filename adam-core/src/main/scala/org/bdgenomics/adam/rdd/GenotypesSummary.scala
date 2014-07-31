@@ -17,14 +17,14 @@
  */
 package org.bdgenomics.adam.rdd
 
-import org.bdgenomics.formats.avro.{ GenotypeAllele, Genotype }
-import org.bdgenomics.adam.rdd.GenotypesSummary.StatisticsMap
-import org.bdgenomics.adam.rich.RichADAMVariant._
 import org.apache.spark.rdd.RDD
-import scala.collection.JavaConverters._
-import scala.collection.immutable.Map
-import scala.collection.mutable
+import org.bdgenomics.adam.rdd.GenotypesSummary.StatisticsMap
 import org.bdgenomics.adam.rdd.GenotypesSummaryCounts.ReferenceAndAlternate
+import org.bdgenomics.adam.rich.RichADAMVariant._
+import org.bdgenomics.formats.avro.{ Genotype, GenotypeAllele }
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.collection.immutable.Map
 
 /**
  * Simple counts of various properties across a set of genotypes.

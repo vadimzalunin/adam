@@ -18,9 +18,9 @@
 package org.bdgenomics.adam.rdd.correction
 
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.AlignmentRecord
 import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.adam.util.SparkFunSuite
+import org.bdgenomics.formats.avro.AlignmentRecord
 
 class TrimReadsSuite extends SparkFunSuite {
 

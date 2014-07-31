@@ -17,15 +17,15 @@
  */
 package org.bdgenomics.adam.rdd
 
+import java.io.File
+import java.util.UUID
+import org.apache.hadoop.fs.Path
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.{ AlignmentRecord, Contig }
-import org.bdgenomics.adam.util.SparkFunSuite
+import org.bdgenomics.adam.predicates.HighQualityReadPredicate
 import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.adam.util.PhredUtils._
-import java.io.File
-import org.apache.hadoop.fs.Path
-import java.util.UUID
-import org.bdgenomics.adam.predicates.HighQualityReadPredicate
+import org.bdgenomics.adam.util.SparkFunSuite
+import org.bdgenomics.formats.avro.{ AlignmentRecord, Contig }
 
 class ADAMContextSuite extends SparkFunSuite {
 

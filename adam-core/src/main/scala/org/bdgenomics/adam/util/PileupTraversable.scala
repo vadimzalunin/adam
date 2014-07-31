@@ -17,12 +17,12 @@
  */
 package org.bdgenomics.adam.util
 
-import scala.collection.JavaConversions._
 import net.sf.samtools.{ TextCigarCodec, CigarOperator }
-import scala.collection.mutable.ListBuffer
-import scala.collection.SortedMap
-import org.bdgenomics.formats.avro.AlignmentRecord
 import org.apache.spark.rdd.RDD
+import org.bdgenomics.formats.avro.AlignmentRecord
+import scala.collection.JavaConversions._
+import scala.collection.SortedMap
+import scala.collection.mutable.ListBuffer
 
 object Base extends Enumeration with Serializable {
   val A, C, T, G, N = Value

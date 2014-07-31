@@ -17,11 +17,11 @@
  */
 package org.bdgenomics.adam.rdd.recalibration
 
-import org.bdgenomics.formats.avro.AlignmentRecord
-import org.bdgenomics.adam.rich.DecadentRead
 import org.bdgenomics.adam.rich.RichAlignmentRecord._
+import org.bdgenomics.adam.rich.DecadentRead
 import org.bdgenomics.adam.util.QualityScore
-import math.{ exp, log }
+import org.bdgenomics.formats.avro.AlignmentRecord
+import scala.math.{ exp, log }
 
 class Recalibrator(val table: RecalibrationTable, val minAcceptableQuality: QualityScore)
     extends (DecadentRead => AlignmentRecord) with Serializable {

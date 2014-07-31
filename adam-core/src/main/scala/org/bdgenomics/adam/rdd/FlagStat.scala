@@ -18,8 +18,8 @@
 package org.bdgenomics.adam.rdd
 
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.AlignmentRecord
 import org.bdgenomics.adam.util.Util._
+import org.bdgenomics.formats.avro.AlignmentRecord
 
 object FlagStatMetrics {
   val emptyFailedQuality = new FlagStatMetrics(0, DuplicateMetrics.empty, DuplicateMetrics.empty, 0, 0, 0, 0, 0, 0, 0, 0, 0, true)

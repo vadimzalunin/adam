@@ -18,7 +18,6 @@
 package org.bdgenomics.adam.converters
 
 import java.io.File
-
 import net.sf.samtools.SAMFileReader
 import org.bdgenomics.adam.models.{ ADAMVariantContext, SequenceDictionary }
 import org.bdgenomics.formats.avro._

@@ -17,10 +17,10 @@
  */
 package org.bdgenomics.adam.util
 
-import org.scalatest.FunSuite
 import net.sf.samtools.TextCigarCodec
-import org.bdgenomics.formats.avro.AlignmentRecord
 import org.bdgenomics.adam.rich.RichAlignmentRecord._
+import org.bdgenomics.formats.avro.AlignmentRecord
+import org.scalatest.FunSuite
 
 class MdTagSuite extends FunSuite {
 

@@ -26,7 +26,6 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.{ AlignmentRecord, Pileup, NucleotideContigFragment }
 import org.bdgenomics.adam.algorithms.consensus.{
   ConsensusGenerator,
   ConsensusGeneratorFromReads
@@ -49,12 +48,13 @@ import org.bdgenomics.adam.rdd.recalibration.BaseQualityRecalibration
 import org.bdgenomics.adam.rdd.correction.{ ErrorCorrection, TrimReads }
 import org.bdgenomics.adam.rich.RichAlignmentRecord
 import org.bdgenomics.adam.util.{
+  ADAMBAMOutputFormat,
+  ADAMSAMOutputFormat,
   HadoopUtil,
   MapTools,
-  ParquetLogger,
-  ADAMBAMOutputFormat,
-  ADAMSAMOutputFormat
+  ParquetLogger
 }
+import org.bdgenomics.formats.avro.{ AlignmentRecord, Pileup, NucleotideContigFragment }
 import parquet.avro.AvroParquetOutputFormat
 import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.metadata.CompressionCodecName

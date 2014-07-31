@@ -17,9 +17,9 @@
  */
 package org.bdgenomics.adam.rich
 
+import org.bdgenomics.adam.rich.ReferenceMappingContext.AlignmentRecordReferenceMapping
 import org.bdgenomics.adam.util.SparkFunSuite
 import org.bdgenomics.formats.avro.{ AlignmentRecord, Contig }
-import org.bdgenomics.adam.rich.ReferenceMappingContext.AlignmentRecordReferenceMapping
 
 class AlignmentRecordReferenceMappingSuite extends SparkFunSuite {
 

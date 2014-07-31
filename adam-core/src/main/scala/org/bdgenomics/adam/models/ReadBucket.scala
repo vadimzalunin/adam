@@ -19,8 +19,8 @@ package org.bdgenomics.adam.models
 
 import com.esotericsoftware.kryo.{ Kryo, Serializer }
 import com.esotericsoftware.kryo.io.{ Input, Output }
-import org.bdgenomics.formats.avro.AlignmentRecord
 import org.bdgenomics.adam.serialization.AvroSerializer
+import org.bdgenomics.formats.avro.AlignmentRecord
 
 /**
  * This class is similar to SingleReadBucket, except it breaks the reads down further.

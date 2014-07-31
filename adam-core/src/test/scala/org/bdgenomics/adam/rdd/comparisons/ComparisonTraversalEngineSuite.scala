@@ -18,11 +18,11 @@
 package org.bdgenomics.adam.rdd.comparisons
 
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.{ AlignmentRecord, Contig }
-import org.bdgenomics.adam.util.{ Histogram, SparkFunSuite }
-import org.bdgenomics.adam.projections.AlignmentRecordField
-import org.bdgenomics.adam.metrics.aggregators.HistogramAggregator
 import org.bdgenomics.adam.metrics.MappedPosition
+import org.bdgenomics.adam.metrics.aggregators.HistogramAggregator
+import org.bdgenomics.adam.projections.AlignmentRecordField
+import org.bdgenomics.adam.util.{ Histogram, SparkFunSuite }
+import org.bdgenomics.formats.avro.{ AlignmentRecord, Contig }
 
 class ComparisonTraversalEngineSuite extends SparkFunSuite {
 

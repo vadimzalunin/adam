@@ -17,7 +17,9 @@
  */
 package org.bdgenomics.adam.rdd.variation
 
-import org.bdgenomics.formats.avro.{ GenotypeType, Genotype, DatabaseVariantAnnotation }
+import org.apache.spark.SparkContext._
+import org.apache.spark.Logging
+import org.apache.spark.rdd.RDD
 import org.bdgenomics.adam.models.{
   ADAMVariantContext,
   SequenceRecord
@@ -25,9 +27,7 @@ import org.bdgenomics.adam.models.{
 import org.bdgenomics.adam.rdd.ADAMSequenceDictionaryRDDAggregator
 import org.bdgenomics.adam.rich.RichADAMVariant
 import org.bdgenomics.adam.rich.RichADAMGenotype._
-import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
+import org.bdgenomics.formats.avro.{ Genotype, GenotypeType, DatabaseVariantAnnotation }
 
 class ADAMVariantContextRDDFunctions(rdd: RDD[ADAMVariantContext]) extends ADAMSequenceDictionaryRDDAggregator[ADAMVariantContext](rdd) {
 

@@ -17,11 +17,11 @@
  */
 package org.bdgenomics.adam.rich
 
-import org.scalatest.FunSuite
-import org.bdgenomics.formats.avro.AlignmentRecord
-import RichAlignmentRecord._
 import net.sf.samtools.Cigar
-import RichCigar._
+import org.bdgenomics.adam.rich.RichAlignmentRecord._
+import org.bdgenomics.adam.rich.RichCigar._
+import org.bdgenomics.formats.avro.AlignmentRecord
+import org.scalatest.FunSuite
 
 class RichCigarSuite extends FunSuite {
 

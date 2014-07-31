@@ -17,19 +17,19 @@
  */
 package org.bdgenomics.adam.predicates
 
-import org.bdgenomics.adam.util.{ ParquetLogger, SparkFunSuite }
+import com.google.common.io.Files
 import java.util.logging.Level
 import java.io.File
-import org.bdgenomics.formats.avro.{
-  Variant,
-  Genotype,
-  Contig,
-  VariantCallingAnnotations
-}
+import org.apache.commons.io.FileUtils
 import org.apache.spark.rdd.RDD
 import org.bdgenomics.adam.rdd.ADAMContext._
-import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
+import org.bdgenomics.adam.util.{ ParquetLogger, SparkFunSuite }
+import org.bdgenomics.formats.avro.{
+  Contig,
+  Genotype,
+  Variant,
+  VariantCallingAnnotations
+}
 
 class GenotypePredicatesSuite extends SparkFunSuite {
 

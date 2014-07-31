@@ -17,8 +17,8 @@
  */
 package org.bdgenomics.adam.rdd
 
+import org.bdgenomics.formats.avro.{ Base, Contig, Pileup }
 import org.scalatest.FunSuite
-import org.bdgenomics.formats.avro.{ Contig, Pileup, Base }
 
 class PileupAggregationSuite extends FunSuite {
 

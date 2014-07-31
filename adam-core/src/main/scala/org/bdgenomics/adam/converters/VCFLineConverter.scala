@@ -18,9 +18,8 @@
 package org.bdgenomics.adam.converters
 
 import java.io._
-
-import scala.collection.JavaConversions._
 import org.bdgenomics.formats.avro.FlatGenotype
+import scala.collection.JavaConversions._
 
 /**
  * VCFLineParser is a line-by-line (streaming) parser for VCF files, written specifically to support

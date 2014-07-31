@@ -17,14 +17,13 @@
  */
 package org.bdgenomics.adam.rdd
 
-import org.bdgenomics.adam.util.SparkFunSuite
-import org.bdgenomics.adam.rdd.ADAMContext._
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.AlignmentRecord
-import org.bdgenomics.adam.algorithms.realignmenttarget.RealignmentTargetFinder
-import org.bdgenomics.adam.algorithms.realignmenttarget.IndelRealignmentTarget
+import org.bdgenomics.adam.algorithms.realignmenttarget.{ IndelRealignmentTarget, RealignmentTargetFinder }
 import org.bdgenomics.adam.models.{ Consensus, ReferencePosition }
+import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.adam.rich.RichAlignmentRecord
+import org.bdgenomics.adam.util.SparkFunSuite
+import org.bdgenomics.formats.avro.AlignmentRecord
 
 class RealignIndelsSuite extends SparkFunSuite {
 

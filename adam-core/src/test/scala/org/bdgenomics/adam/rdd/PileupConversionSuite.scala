@@ -17,8 +17,8 @@
  */
 package org.bdgenomics.adam.rdd
 
-import org.scalatest.FunSuite
 import org.bdgenomics.formats.avro.{ AlignmentRecord, Base }
+import org.scalatest.FunSuite
 
 class PileupConversionSuite extends FunSuite {
 

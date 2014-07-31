@@ -17,11 +17,11 @@
  */
 package org.bdgenomics.adam.rdd
 
-import org.bdgenomics.formats.avro.{ Base, Contig, Pileup }
-import org.bdgenomics.adam.models.ReferencePosition
-import org.bdgenomics.adam.rdd.ADAMContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
+import org.bdgenomics.adam.models.ReferencePosition
+import org.bdgenomics.adam.rdd.ADAMContext._
+import org.bdgenomics.formats.avro.{ Base, Contig, Pileup }
 
 private[rdd] class PileupAggregator(validate: Boolean = false) extends Serializable with Logging {
 

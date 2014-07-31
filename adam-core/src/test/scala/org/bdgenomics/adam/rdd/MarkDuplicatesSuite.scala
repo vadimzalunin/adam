@@ -17,10 +17,10 @@
  */
 package org.bdgenomics.adam.rdd
 
+import java.util.UUID
+import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.adam.util.SparkFunSuite
 import org.bdgenomics.formats.avro.{ AlignmentRecord, Contig }
-import org.bdgenomics.adam.rdd.ADAMContext._
-import java.util.UUID
 
 class MarkDuplicatesSuite extends SparkFunSuite {
 
