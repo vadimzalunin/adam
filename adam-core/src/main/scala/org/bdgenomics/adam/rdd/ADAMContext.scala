@@ -54,8 +54,8 @@ object ADAMContext {
   // Add methods specific to the Pileup RDDs
   implicit def rddToADAMPileupRDD(rdd: RDD[Pileup]) = new PileupRDDFunctions(rdd)
 
-  // Add methods specific to the ADAMRod RDDs
-  implicit def rddToADAMRodRDD(rdd: RDD[ADAMRod]) = new ADAMRodRDDFunctions(rdd)
+  // Add methods specific to the Rod RDDs
+  implicit def rddToRodRDD(rdd: RDD[Rod]) = new RodRDDFunctions(rdd)
 
   // Add generic RDD methods for all types of ADAM RDDs
   implicit def rddToADAMRDD[T <% SpecificRecord: Manifest](rdd: RDD[T]) = new ADAMRDDFunctions(rdd)

@@ -54,7 +54,7 @@ object IndelTable {
    * @return Returns a table with the known indels populated.
    */
   def apply(knownIndelsFile: String, sc: SparkContext): IndelTable = {
-    val rdd: RDD[ADAMVariantContext] = sc.adamVCFLoad(knownIndelsFile)
+    val rdd: RDD[VariantContext] = sc.adamVCFLoad(knownIndelsFile)
     apply(rdd.map(_.variant.variant))
   }
 

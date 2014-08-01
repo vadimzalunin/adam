@@ -32,7 +32,7 @@ import org.bdgenomics.adam.algorithms.consensus.{
 }
 import org.bdgenomics.adam.converters.AlignmentRecordConverter
 import org.bdgenomics.adam.models.{
-  ADAMRod,
+  Rod,
   RecordGroup,
   RecordGroupDictionary,
   ReferencePosition,
@@ -359,10 +359,10 @@ class AlignmentRecordRDDFunctions(rdd: RDD[AlignmentRecord]) extends ADAMSequenc
    * @param bucketSize Size in basepairs of buckets. Larger buckets take more time per
    * bucket to convert, but have lower skew. Default is 1000.
    * @param secondaryAlignments Creates rods for non-primary aligned reads. Default is false.
-   * @return RDD of ADAMRods.
+   * @return RDD of Rods.
    */
   def adamRecords2Rods(bucketSize: Int = 1000,
-                       secondaryAlignments: Boolean = false): RDD[ADAMRod] = {
+                       secondaryAlignments: Boolean = false): RDD[Rod] = {
 
     /**
      * Maps a read to one or two buckets. A read maps to a single bucket if both
@@ -395,13 +395,13 @@ class AlignmentRecordRDDFunctions(rdd: RDD[AlignmentRecord]) extends ADAMSequenc
      * @param bucket Tuple of (bucket number, reads in bucket).
      * @return A sequence containing the rods in this bucket.
      */
-    def bucketedReadsToRods(bucket: (ReferencePosition, Iterable[AlignmentRecord])): Iterable[ADAMRod] = {
+    def bucketedReadsToRods(bucket: (ReferencePosition, Iterable[AlignmentRecord])): Iterable[Rod] = {
       val (_, bucketReads) = bucket
 
       bucketReads.flatMap(pp.readToPileups)
         .groupBy(ReferencePosition(_))
         .toList
-        .map(g => ADAMRod(g._1, g._2.toList)).toSeq
+        .map(g => Rod(g._1, g._2.toList)).toSeq
     }
 
     bucketedReads.flatMap(bucketedReadsToRods)
@@ -479,7 +479,7 @@ class PileupRDDFunctions(rdd: RDD[Pileup]) extends Serializable with Logging {
    * @param coverage Coverage value is used to increase number of reducer operators.
    * @return RDD with aggregated bases.
    *
-   * @see ADAMRodRDDFunctions#adamAggregateRods
+   * @see RodRDDFunctions#adamAggregateRods
    */
   def adamAggregatePileups(coverage: Int = 30): RDD[Pileup] = {
     val helper = new PileupAggregator
@@ -492,22 +492,22 @@ class PileupRDDFunctions(rdd: RDD[Pileup]) extends Serializable with Logging {
    * @param coverage Coverage value is used to increase number of reducer operators.
    * @return RDD with rods grouped by reference position.
    */
-  def adamPileupsToRods(coverage: Int = 30): RDD[ADAMRod] = {
+  def adamPileupsToRods(coverage: Int = 30): RDD[Rod] = {
     val groups = rdd.groupBy((p: Pileup) => ReferencePosition(p), coverage)
 
-    groups.map(kv => ADAMRod(kv._1, kv._2.toList))
+    groups.map(kv => Rod(kv._1, kv._2.toList))
   }
 
 }
 
-class ADAMRodRDDFunctions(rdd: RDD[ADAMRod]) extends Serializable with Logging {
+class RodRDDFunctions(rdd: RDD[Rod]) extends Serializable with Logging {
   /**
    * Given an RDD of rods, splits the rods up by the specific sample they correspond to.
    * Returns a flat RDD.
    *
    * @return Rods split up by samples and _not_ grouped together.
    */
-  def adamSplitRodsBySamples(): RDD[ADAMRod] = {
+  def adamSplitRodsBySamples(): RDD[Rod] = {
     rdd.flatMap(_.splitBySamples())
   }
 
@@ -517,7 +517,7 @@ class ADAMRodRDDFunctions(rdd: RDD[ADAMRod]) extends Serializable with Logging {
    *
    * @return Rods split up by samples and grouped together by position.
    */
-  def adamDivideRodsBySamples(): RDD[(ReferencePosition, List[ADAMRod])] = {
+  def adamDivideRodsBySamples(): RDD[(ReferencePosition, List[Rod])] = {
     rdd.keyBy(_.position).map(r => (r._1, r._2.splitBySamples()))
   }
 
@@ -528,11 +528,11 @@ class ADAMRodRDDFunctions(rdd: RDD[ADAMRod]) extends Serializable with Logging {
    *
    * @see ADAMPileupRDDFunctions#adamAggregatePileups
    */
-  def adamAggregateRods(): RDD[ADAMRod] = {
+  def adamAggregateRods(): RDD[Rod] = {
     val helper = new PileupAggregator
     rdd.map(r => (r.position, r.pileups))
       .map(kv => (kv._1, helper.flatten(kv._2)))
-      .map(kv => new ADAMRod(kv._1, kv._2))
+      .map(kv => new Rod(kv._1, kv._2))
   }
 
   /**

@@ -36,7 +36,7 @@ class ConsensusGeneratorFromKnowns(file: String, sc: SparkContext) extends Conse
    * @return Returns an option which wraps an RDD of indel realignment targets.
    */
   def targetsToAdd(): Option[RDD[IndelRealignmentTarget]] = {
-    val rdd: RDD[ADAMVariantContext] = sc.adamVCFLoad(file)
+    val rdd: RDD[VariantContext] = sc.adamVCFLoad(file)
 
     Some(rdd.map(_.variant.variant)
       .filter(v => v.getReferenceAllele.length != v.getAlternateAllele.length)

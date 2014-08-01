@@ -19,7 +19,7 @@ package org.bdgenomics.adam.converters
 
 import java.io.File
 import net.sf.samtools.SAMFileReader
-import org.bdgenomics.adam.models.{ ADAMVariantContext, SequenceDictionary }
+import org.bdgenomics.adam.models.{ VariantContext => ADAMVariantContext, SequenceDictionary }
 import org.bdgenomics.formats.avro._
 import org.broadinstitute.variant.variantcontext.{ Allele, GenotypeBuilder, GenotypeType, VariantContextBuilder }
 import org.scalatest.FunSuite

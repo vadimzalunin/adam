@@ -18,8 +18,8 @@
 package org.bdgenomics.adam.converters
 
 import org.bdgenomics.formats.avro._
-import org.bdgenomics.adam.models.{ ADAMVariantContext, SequenceDictionary }
-import org.broadinstitute.variant.variantcontext.{ VariantContext, VariantContextBuilder, Allele, GenotypeLikelihoods, GenotypesContext }
+import org.bdgenomics.adam.models.{ VariantContext => ADAMVariantContext, SequenceDictionary }
+import org.broadinstitute.variant.variantcontext.{ VariantContext => BroadVariantContext, VariantContextBuilder, Allele, GenotypeLikelihoods, GenotypesContext }
 import scala.collection.JavaConversions._
 import java.util.Collections
 
@@ -28,7 +28,7 @@ object VariantContextConverter {
   private lazy val splitFromMultiAllelicField = Genotype.SCHEMA$.getField("splitFromMultiAllelic")
 
   // One conversion method for each way of representing an Allele
-  private def convertAllele(vc: VariantContext, allele: Allele): GenotypeAllele = {
+  private def convertAllele(vc: BroadVariantContext, allele: Allele): GenotypeAllele = {
     if (allele.isNoCall) GenotypeAllele.NoCall
     else if (allele.isReference) GenotypeAllele.Ref
     else if (allele == NON_REF_ALLELE || !vc.hasAlternateAllele(allele)) GenotypeAllele.OtherAlt
@@ -85,7 +85,7 @@ class VariantContextConverter(dict: Option[SequenceDictionary] = None) extends S
    * @param vc GATK Variant context to convert.
    * @return ADAM variant contexts
    */
-  def convert(vc: VariantContext): Seq[ADAMVariantContext] = {
+  def convert(vc: BroadVariantContext): Seq[ADAMVariantContext] = {
 
     // INFO field variant calling annotations, e.g. MQ
     lazy val calling_annotations: VariantCallingAnnotations = extractVariantCallingAnnotations(vc)
@@ -167,7 +167,7 @@ class VariantContextConverter(dict: Option[SequenceDictionary] = None) extends S
      */
   }
 
-  def convertToAnnotation(vc: VariantContext): DatabaseVariantAnnotation = {
+  def convertToAnnotation(vc: BroadVariantContext): DatabaseVariantAnnotation = {
     assert(false, "TODO")
     /*
     val variant = createADAMVariant(vc)
@@ -176,7 +176,7 @@ class VariantContextConverter(dict: Option[SequenceDictionary] = None) extends S
     new DatabaseVariantAnnotation()
   }
 
-  private def createContig(vc: VariantContext): Contig = {
+  private def createContig(vc: BroadVariantContext): Contig = {
     val contigName = contigToRefSeq.getOrElse(vc.getChr, vc.getChr)
 
     Contig.newBuilder()
@@ -184,7 +184,7 @@ class VariantContextConverter(dict: Option[SequenceDictionary] = None) extends S
       .build()
   }
 
-  private def createADAMVariant(vc: VariantContext, alt: Option[String]): Variant = {
+  private def createADAMVariant(vc: BroadVariantContext, alt: Option[String]): Variant = {
     // VCF CHROM, POS, REF and ALT
     val builder = Variant.newBuilder
       .setContig(createContig(vc))
@@ -195,7 +195,7 @@ class VariantContextConverter(dict: Option[SequenceDictionary] = None) extends S
     builder.build
   }
 
-  private def extractVariantDatabaseAnnotation(variant: Variant, vc: VariantContext): DatabaseVariantAnnotation = {
+  private def extractVariantDatabaseAnnotation(variant: Variant, vc: BroadVariantContext): DatabaseVariantAnnotation = {
     val annotation = DatabaseVariantAnnotation.newBuilder()
       .setVariant(variant)
       .build
@@ -205,7 +205,7 @@ class VariantContextConverter(dict: Option[SequenceDictionary] = None) extends S
   }
 
   private def extractGenotypes(
-    vc: VariantContext,
+    vc: BroadVariantContext,
     variant: Variant,
     annotations: VariantCallingAnnotations,
     setPL: (org.broadinstitute.variant.variantcontext.Genotype, Genotype.Builder) => Unit): Seq[Genotype] = {
@@ -233,7 +233,7 @@ class VariantContextConverter(dict: Option[SequenceDictionary] = None) extends S
     genotypes
   }
 
-  private def extractNonReferenceGenotypes(vc: VariantContext, variant: Variant, annotations: VariantCallingAnnotations): Seq[Genotype] = {
+  private def extractNonReferenceGenotypes(vc: BroadVariantContext, variant: Variant, annotations: VariantCallingAnnotations): Seq[Genotype] = {
     assert(vc.isBiallelic)
     extractGenotypes(vc, variant, annotations,
       (g: org.broadinstitute.variant.variantcontext.Genotype, b: Genotype.Builder) => {
@@ -241,14 +241,14 @@ class VariantContextConverter(dict: Option[SequenceDictionary] = None) extends S
       })
   }
 
-  private def extractReferenceGenotypes(vc: VariantContext, variant: Variant, annotations: VariantCallingAnnotations): Seq[Genotype] = {
+  private def extractReferenceGenotypes(vc: BroadVariantContext, variant: Variant, annotations: VariantCallingAnnotations): Seq[Genotype] = {
     assert(vc.isBiallelic)
     extractGenotypes(vc, variant, annotations, (g, b) => {
       if (g.hasPL) b.setNonReferenceLikelihoods(g.getPL.toList.map(p => p: java.lang.Integer))
     })
   }
 
-  private def extractReferenceModelGenotypes(vc: VariantContext, variant: Variant, annotations: VariantCallingAnnotations): Seq[Genotype] = {
+  private def extractReferenceModelGenotypes(vc: BroadVariantContext, variant: Variant, annotations: VariantCallingAnnotations): Seq[Genotype] = {
     extractGenotypes(vc, variant, annotations, (g, b) => {
       if (g.hasPL) {
         val pls = g.getPL.map(p => p: java.lang.Integer)
@@ -263,7 +263,7 @@ class VariantContextConverter(dict: Option[SequenceDictionary] = None) extends S
     })
   }
 
-  private def extractVariantCallingAnnotations(vc: VariantContext): VariantCallingAnnotations = {
+  private def extractVariantCallingAnnotations(vc: BroadVariantContext): VariantCallingAnnotations = {
     val call: VariantCallingAnnotations.Builder = VariantCallingAnnotations.newBuilder
 
     // VCF QUAL, FILTER and INFO fields
@@ -285,7 +285,7 @@ class VariantContextConverter(dict: Option[SequenceDictionary] = None) extends S
    * @param vc
    * @return GATK VariantContext
    */
-  def convert(vc: ADAMVariantContext): VariantContext = {
+  def convert(vc: ADAMVariantContext): BroadVariantContext = {
     val variant: Variant = vc.variant
     val vcb = new VariantContextBuilder()
       .chr(refSeqToContig.getOrElse(variant.getContig.getContigName.toString,

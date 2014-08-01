@@ -42,7 +42,7 @@ import org.bdgenomics.formats.avro._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.bdgenomics.adam.converters.VariantAnnotationConverter
-import org.bdgenomics.adam.rich.RichADAMVariant
+import org.bdgenomics.adam.rich.RichVariant
 
 object VcfAnnotation2ADAM extends ADAMCommandCompanion {
 
@@ -73,8 +73,8 @@ class VcfAnnotation2ADAM(val args: VcfAnnotation2ADAMArgs) extends ADAMSparkComm
 
     if (args.currentAnnotations != null) {
       val existingAnnotations: RDD[DatabaseVariantAnnotation] = sc.adamLoad(args.currentAnnotations)
-      val keyedAnnotations = existingAnnotations.keyBy(anno => new RichADAMVariant(anno.getVariant))
-      val joinedAnnotations = keyedAnnotations.join(annotations.keyBy(anno => new RichADAMVariant(anno.getVariant)))
+      val keyedAnnotations = existingAnnotations.keyBy(anno => new RichVariant(anno.getVariant))
+      val joinedAnnotations = keyedAnnotations.join(annotations.keyBy(anno => new RichVariant(anno.getVariant)))
       val mergedAnnotations = joinedAnnotations.map(kv => VariantAnnotationConverter.mergeAnnotations(kv._2._1, kv._2._2))
       mergedAnnotations.adamSave(args.outputPath, blockSize = args.blockSize, pageSize = args.pageSize,
         compressCodec = args.compressionCodec, disableDictionaryEncoding = args.disableDictionary)

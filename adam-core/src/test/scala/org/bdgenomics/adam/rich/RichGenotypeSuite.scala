@@ -19,10 +19,10 @@ package org.bdgenomics.adam.rich
 
 import org.scalatest.FunSuite
 import org.bdgenomics.formats.avro._
-import org.bdgenomics.adam.rich.RichADAMGenotype._
+import org.bdgenomics.adam.rich.RichGenotype._
 import scala.collection.JavaConversions._
 
-class RichADAMGenotypeSuite extends FunSuite {
+class RichGenotypeSuite extends FunSuite {
 
   def v0 = Variant.newBuilder
     .setContig(Contig.newBuilder.setContigName("chr1").build)

@@ -19,7 +19,7 @@ package org.bdgenomics.adam.rdd
 
 import java.nio.file.Files
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.adam.models.{ ADAMVariantContext, ReferenceRegion }
+import org.bdgenomics.adam.models.{ VariantContext, ReferenceRegion }
 import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.adam.rdd.variation.ADAMVariationContext._
 import org.bdgenomics.adam.util.SparkFunSuite
@@ -444,7 +444,7 @@ class ADAMRDDFunctionsSuite extends SparkFunSuite {
       .setSampleId("you")
       .build()
 
-    val vc = ADAMVariantContext.buildFromGenotypes(List(genotype0, genotype1))
+    val vc = VariantContext.buildFromGenotypes(List(genotype0, genotype1))
     val samples = sc.parallelize(List(vc)).adamGetCallsetSamples()
 
     assert(samples.count(_ == "you") === 1)

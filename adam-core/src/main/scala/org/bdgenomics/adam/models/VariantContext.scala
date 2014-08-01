@@ -18,47 +18,47 @@
 package org.bdgenomics.adam.models
 
 import org.bdgenomics.formats.avro.{ Genotype, DatabaseVariantAnnotation, Variant }
-import org.bdgenomics.adam.rich.RichADAMVariant
-import org.bdgenomics.adam.rich.RichADAMVariant._
+import org.bdgenomics.adam.rich.RichVariant
+import org.bdgenomics.adam.rich.RichVariant._
 
 /**
- * Note: ADAMVariantContext inherits its name from the Picard VariantContext, and is not related to the SparkContext object.
+ * Note: VariantContext inherits its name from the Picard VariantContext, and is not related to the SparkContext object.
  * If you're looking for the latter, see [[org.bdgenomics.adam.rdd.variation.ADAMVariationContext]]
  */
 
-object ADAMVariantContext {
+object VariantContext {
 
   /**
-   * Constructs an ADAMVariantContext from locus data. Used in merger process.
+   * Constructs an VariantContext from locus data. Used in merger process.
    *
    * @param kv Nested tuple containing (locus on reference, (variants at site, genotypes at site,
    *           optional domain annotation at site))
-   * @return ADAMVariantContext corresponding to the data above.
+   * @return VariantContext corresponding to the data above.
    */
-  def apply(kv: (ReferencePosition, Variant, Iterable[Genotype], Option[DatabaseVariantAnnotation])): ADAMVariantContext = {
-    new ADAMVariantContext(kv._1, kv._2, kv._3, kv._4)
+  def apply(kv: (ReferencePosition, Variant, Iterable[Genotype], Option[DatabaseVariantAnnotation])): VariantContext = {
+    new VariantContext(kv._1, kv._2, kv._3, kv._4)
   }
 
   /**
-   * Constructs an ADAMVariantContext from an Variant
+   * Constructs an VariantContext from an Variant
    *
    * @param v Variant which is used to construct the ReferencePosition
-   * @return ADAMVariantContext corresponding to the Variant
+   * @return VariantContext corresponding to the Variant
    */
-  def apply(v: Variant): ADAMVariantContext = {
+  def apply(v: Variant): VariantContext = {
     apply((ReferencePosition(v), v, Seq(), None))
   }
 
   /**
-   * Constructs an ADAMVariantContext from an Variant and Seq[Genotype]
+   * Constructs an VariantContext from an Variant and Seq[Genotype]
    *  and DatabaseVariantAnnotation
    *
    * @param v Variant which is used to construct the ReferencePosition
    * @param genotypes Seq[Genotype]
    * @param annotation Option[DatabaseVariantAnnotation]
-   * @return ADAMVariantContext corresponding to the Variant
+   * @return VariantContext corresponding to the Variant
    */
-  def apply(v: Variant, genotypes: Iterable[Genotype], annotation: Option[DatabaseVariantAnnotation] = None): ADAMVariantContext = {
+  def apply(v: Variant, genotypes: Iterable[Genotype], annotation: Option[DatabaseVariantAnnotation] = None): VariantContext = {
     apply((ReferencePosition(v), v, genotypes, annotation))
   }
 
@@ -70,23 +70,23 @@ object ADAMVariantContext {
    * @param genotypes List of genotypes to build variant context from.
    * @return A variant context corresponding to the variants and genotypes at this site.
    */
-  def buildFromGenotypes(genotypes: Seq[Genotype]): ADAMVariantContext = {
+  def buildFromGenotypes(genotypes: Seq[Genotype]): VariantContext = {
     val position = ReferencePosition(genotypes.head)
     assert(genotypes.map(ReferencePosition(_)).forall(_ == position),
       "Genotypes do not all have the same position.")
 
     val variant = genotypes.head.getVariant
 
-    new ADAMVariantContext(position, variant, genotypes, None)
+    new VariantContext(position, variant, genotypes, None)
   }
 }
 
-class ADAMVariantContext(
+class VariantContext(
     val position: ReferencePosition,
-    val variant: RichADAMVariant,
+    val variant: RichVariant,
     val genotypes: Iterable[Genotype],
     val databases: Option[DatabaseVariantAnnotation] = None) {
-  def this(variant: RichADAMVariant, genotypes: Iterable[Genotype], database: Option[DatabaseVariantAnnotation] = None) = {
+  def this(variant: RichVariant, genotypes: Iterable[Genotype], database: Option[DatabaseVariantAnnotation] = None) = {
     this(ReferencePosition(variant), variant, genotypes, database)
   }
 }

@@ -23,7 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.bdgenomics.adam.models.SnpTable
 import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.adam.rdd.variation.ADAMVariationContext._
-import org.bdgenomics.adam.rich.RichADAMVariant
+import org.bdgenomics.adam.rich.RichVariant
 import org.bdgenomics.formats.avro.AlignmentRecord
 import org.kohsuke.args4j.{ Argument, Option => Args4jOption }
 
@@ -96,7 +96,7 @@ class Transform(protected val args: TransformArgs) extends ADAMSparkCommand[Tran
 
     if (args.recalibrateBaseQualities) {
       log.info("Recalibrating base qualities")
-      val variants: RDD[RichADAMVariant] = sc.adamVCFLoad(args.knownSnpsFile).map(_.variant)
+      val variants: RDD[RichVariant] = sc.adamVCFLoad(args.knownSnpsFile).map(_.variant)
       val knownSnps = SnpTable(variants)
       adamRecords = adamRecords.adamBQSR(sc.broadcast(knownSnps))
     }

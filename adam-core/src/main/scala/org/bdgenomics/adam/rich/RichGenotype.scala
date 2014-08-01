@@ -20,12 +20,12 @@ package org.bdgenomics.adam.rich
 import org.bdgenomics.formats.avro.{ GenotypeType, GenotypeAllele, Genotype }
 import scala.collection.JavaConversions._
 
-object RichADAMGenotype {
-  implicit def genotypeToRichGenotype(g: Genotype) = new RichADAMGenotype(g)
-  implicit def richGenotypeToGenotype(g: RichADAMGenotype) = g.genotype
+object RichGenotype {
+  implicit def genotypeToRichGenotype(g: Genotype) = new RichGenotype(g)
+  implicit def richGenotypeToGenotype(g: RichGenotype) = g.genotype
 }
 
-class RichADAMGenotype(val genotype: Genotype) {
+class RichGenotype(val genotype: Genotype) {
   def ploidy: Int = genotype.getAlleles.size
 
   def getType: GenotypeType = {

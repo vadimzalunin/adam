@@ -25,7 +25,7 @@ import org.bdgenomics.formats.avro.Pileup
  * @param position Position on the reference genome.
  * @param pileups A list representing the bases at this locus.
  */
-case class ADAMRod(position: ReferencePosition, pileups: List[Pileup]) {
+case class Rod(position: ReferencePosition, pileups: List[Pileup]) {
   // all bases must be at the same position
   require(pileups.forall(ReferencePosition(_) == position))
 
@@ -36,12 +36,11 @@ case class ADAMRod(position: ReferencePosition, pileups: List[Pileup]) {
    *
    * @return A list of rods, each corresponding to a single sample.
    */
-  def splitBySamples(): List[ADAMRod] = {
+  def splitBySamples(): List[Rod] = {
     if (isSingleSample) {
-      List(new ADAMRod(position, pileups))
+      List(new Rod(position, pileups))
     } else {
-      pileups.groupBy(_.getRecordGroupSample).values.toList.map(pg => new ADAMRod(position, pg))
+      pileups.groupBy(_.getRecordGroupSample).values.toList.map(pg => new Rod(position, pg))
     }
   }
-
 }
