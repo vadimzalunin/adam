@@ -101,14 +101,26 @@ public class CRAMInputFormat extends FileInputFormat<Void,AlignmentRecord> {
     }
 
     public static class CRAMSplit extends FileSplit {
+        private List<Entry> containerIndices;
+
         public static CRAMSplit makeFromIndex(Path file, 
                                               List<Entry> containerIndex,
                                               int startContainer,
-                                              int numContainers) {
+                                              int numContainers,
+                                              JobConf conf) {
         }
 
-        private CRAMSplit(Path file, List<Entry> containerIndices) {
-            
+        private CRAMSplit(Path file, 
+                          List<Entry> indices,
+                          int start,
+                          int length,
+                          JobConf conf) {
+            super(file, start, length, conf);
+            containerIndices = indices;
+        }
+
+        public List<Entry> getContainerIndices() {
+            return containerIndices;
         }
     }
     
@@ -122,11 +134,14 @@ public class CRAMInputFormat extends FileInputFormat<Void,AlignmentRecord> {
         private long pos;
         // file:  the file being read
         private Path file;
+        // the containers indices for this split
+        private List<Entry> containerIndices;
 
-        public CRAMRecordReader(Configuration conf, FileSplit split) throws IOException {
+        public CRAMRecordReader(Configuration conf, CRAMSplit split) throws IOException {
             file = split.getPath();
             start = split.getStart();
             end = start + split.getLength();
+            containerIndices = split.getContainerIndices();
 
             // open the file
             FileSystem fs = file.getFileSystem(conf);
