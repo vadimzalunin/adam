@@ -18,6 +18,10 @@
 
 package org.bdgenomics.adam.io;
 
+import htsjdk.samtools.cram.index.CramIndex;
+import htsjdk.samtools.cram.index.CramIndex.Entry;
+import htsjdk.samtools.cram.structure.Container;
+import htsjdk.samtools.cram.structure.CramCompressionRecord;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,6 +39,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.util.LineReader;
+import org.bdgenomics.adam.converters.CramCompressionRecordConverter;
 import org.bdgenomics.formats.avro.AlignmentRecord;
 
 /**
@@ -44,16 +49,91 @@ import org.bdgenomics.formats.avro.AlignmentRecord;
  * @date September 2014
  */
 public class CRAMInputFormat extends FileInputFormat<Void,AlignmentRecord> {
+
+    @Override InputSplit[] getSplits(JobConf conf, int numSplits) throws IOException {
+        // get the files to process
+        FileStatus[] files = this.listStatus(conf);
+
+        // we'll keep the indices in an array per file
+        List<Entry>[] indices = new List<Entry>[files.length];
+        int totalContainers = 0;
+
+        // loop over and compute indices; increment container count
+        for (int i = 0; i < files.length; i++) {
+            indices[i] = readIndex(filename);
+            totalContainers += indices[i].size();
+        }
+        
+        // if we have more containers than requested splits and fewer files than
+        // requested splits, we'll return the requested number
+        // of splits, else, we'll return the number of containers or the number of files
+        if (files.length > numSplits) {
+        } else if (containerIndices.size() < numSplits) {
+        } else {
+        }
+    }
+
+    @Override protected boolean isSplitable(FileSystem fs, Path filename) {
+        List<Entry> index = readIndex(filename);
+
+        // we can split the file if we have more than one container
+        return index.size() >= 1;
+    }
+
+    private static List<Entry> readIndex(Path filename) {
+        // we look for the cram index at the position of the current file + ".crai"
+        Path craiPath = new Path(filename.getParent(), filename.getChild() + ".crai");
+        if (fs.exists(craiPath)) {
+            InputStream craiStream = fs.open(craiPath);
+            return CramIndex.readIndexFromCraiStream(craiStream);
+        } else {
+            // we need to read the indices from the cram file; this should be quick
+            InputStream cramStream = fs.open(filename);
+            return CramIndex.buidIndexForCramFile(cramStream);
+        }
+    }
+
+    @Override protected FileSplit makeSplit(Path file,
+                                            long start,
+                                            long length,
+                                            String[] hosts) {
+        throw new NotImplementedException();
+    }
+
+    public static class CRAMSplit extends FileSplit {
+        public static CRAMSplit makeFromIndex(Path file, 
+                                              List<Entry> containerIndex,
+                                              int startContainer,
+                                              int numContainers) {
+        }
+
+        private CRAMSplit(Path file, List<Entry> containerIndices) {
+            
+        }
+    }
     
     public static class CRAMRecordReader extends RecordReader<Void,AlignmentRecord> {
 
-        public CRAMRecordReader(Configuration conf, FileSplit split) throws IOException {
-        }
+        // start:  first valid data index
+        private long start;
+        // end:  first index value beyond the slice, i.e. slice is in range [start,end)
+        private long end;
+        // pos: current position in file
+        private long pos;
+        // file:  the file being read
+        private Path file;
 
-        /**
-         * Position the input stream at the start of the first record.
-         */
-        private void positionAtFirstRecord(FSDataInputStream stream) throws IOException {
+        public CRAMRecordReader(Configuration conf, FileSplit split) throws IOException {
+            file = split.getPath();
+            start = split.getStart();
+            end = start + split.getLength();
+
+            // open the file
+            FileSystem fs = file.getFileSystem(conf);
+            FSDataInputStream fileIn = fs.open(file);
+
+            // advance to the start of the stream
+            stream.seek(start);
         }
 
         /**
@@ -87,40 +167,9 @@ public class CRAMInputFormat extends FileInputFormat<Void,AlignmentRecord> {
         }
 
         /**
-         * Create an object of the appropriate type to be used as a key.
-         */
-        public AlignmentRecord createKey() {
-        }
-
-        /**
-         * Create an object of the appropriate type to be used as a value.
-         */
-        public AlignmentRecord createValue() {
-        }
-
-        /**
-         * Returns the current position in the input.
-         */
-        public long getPos() { 
-        }
-
-        /**
          * How much of the input has the RecordReader consumed i.e.
          */
         public float getProgress() {
-        }
-
-        public String makePositionMessage() {
-        }
-
-        /**
-         * Reads the next key/value pair from the input for processing.
-         */
-        public boolean next(Text value) throws IOException {
-        }
-
-
-        private int appendLineInto(Text dest, boolean eofOk) throws EOFException, IOException {
         }
     }
 
